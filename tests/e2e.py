@@ -140,8 +140,8 @@ def flow_practice(browser, label, device=None):
     check(f"{label} 回首頁：今天練完了", pg.locator("#dueN").inner_text() == "0" and pg.locator("#goToday").is_disabled())
     pg.reload(); pg.wait_for_selector("#main .btn")
     check(f"{label} 重新整理後進度還在", pg.locator("#dueN").inner_text() == "0" and pg.evaluate("Object.keys(G5WrongApp.state().it).length") == 3)
-    pg.locator("#listBox summary").click()
-    lst = pg.locator("#list").inner_text()
+    pg.locator("#listBox > summary").click()
+    lst =pg.locator("#list").inner_text()
     check(f"{label} 錯題清單分科列出、有狀態", all(x in lst for x in ["數學", "國語", "自然", "再練"]), lst)
     pg.locator('#main .sub[data-sub="數學"]').click()
     check(f"{label} 數學考前總複習：只出數學 1 題（不管排程）", "/ 1 題" in pg.locator("#main .qhead span").first.inner_text() and cur_item(pg)["subject"] == "數學")
@@ -162,6 +162,41 @@ def flow_master(browser):
     pg.locator("#homeBtn").click()
     check("學會：首頁「已經學會」變 1", pg.locator("#main .three div").nth(1).locator("b").inner_text() == "1")
     check("學會流程沒有 JS 錯誤", not errors, errors)
+    ctx.close()
+
+
+def flow_hide_reset(browser, label, device=None):
+    # 律師 2026-10-13：「為何我測試用的題目，我沒法清除？有無清除或重置按鈕？」
+    ctx, pg, errors = open_page(browser, device, items=ITEMS)
+    pg.locator("#listBox > summary").click()
+    pg.locator(f'[data-hide="{ITEMS[0]["id"]}"]').click()
+    check(f"{label} 不用再練：今天要練 3→2、考前總複習少一科", pg.locator("#dueN").inner_text() == "2" and pg.locator("#main .sub").count() == 3)
+    check(f"{label} 不用再練：清單底下列出已隱藏 1 題", "已設成不用再練的 1 題" in pg.locator("#list").inner_text())
+    pg.reload(); pg.wait_for_selector("#main .btn")
+    check(f"{label} 不用再練：重新整理後仍隱藏", pg.locator("#dueN").inner_text() == "2")
+    pg.locator("#goToday").click()
+    seen = set()
+    for _ in range(2):
+        seen.add(answer(pg, True)["id"]); pg.locator("#nextBtn").click()
+    check(f"{label} 隱藏的題不會出現在今天的複習", ITEMS[0]["id"] not in seen and pg.locator("#main .done").count() == 1, seen)
+    pg.locator("#homeBtn").click()
+    if not pg.locator("#listBox").evaluate("e=>e.open"):
+        pg.locator("#listBox > summary").click()
+    pg.locator("#hiddenBox summary").click()
+    pg.locator(f'[data-unhide="{ITEMS[0]["id"]}"]').click()
+    check(f"{label} 恢復：那題回到今天要練（1 題）", pg.locator("#dueN").inner_text() == "1" and pg.locator("#hiddenBox").count() == 0)
+    pg.locator("#setBox summary").click()
+    pg.locator("#resetBtn").click()
+    check(f"{label} 清除要按第二次確認（不用對話框）", pg.locator("#resetYes").is_visible() and pg.evaluate("Object.keys(G5WrongApp.state().it).length") == 2)
+    pg.locator("#resetNo").click()
+    check(f"{label} 按「不要清除」紀錄還在", pg.evaluate("Object.keys(G5WrongApp.state().it).length") == 2 and pg.locator("#resetBtn").is_visible())
+    pg.locator(f'[data-hide="{ITEMS[1]["id"]}"]').click()
+    pg.locator("#resetBtn").click(); pg.locator("#resetYes").click()
+    s = pg.evaluate("G5WrongApp.state()")
+    check(f"{label} 確定清除：作答紀錄歸零、隱藏名單保留、今天要練回到 2", s["it"] == {} and s["hidden"] == {ITEMS[1]["id"]: True} and pg.locator("#dueN").inner_text() == "2", s)
+    pg.reload(); pg.wait_for_selector("#main .btn")
+    check(f"{label} 清除後重新整理仍是清除狀態", pg.evaluate("Object.keys(G5WrongApp.state().it).length") == 0)
+    check(f"{label} 清除／隱藏流程沒有 JS 錯誤", not errors, errors)
     ctx.close()
 
 
@@ -205,12 +240,14 @@ def main():
         flow_practice(cr, "桌機", {"viewport": {"width": 1280, "height": 900}})
         flow_practice(cr, "手機390", {"viewport": {"width": 390, "height": 844}, "is_mobile": True, "has_touch": True, "device_scale_factor": 2})
         flow_master(cr)
+        flow_hide_reset(cr, "桌機", {"viewport": {"width": 1280, "height": 900}})
         flow_upload(cr)
         cr.close()
         wk = p.webkit.launch()
         ipad = p.devices["iPad (gen 7)"]
         flow_empty(wk, "iPad", ipad)
         flow_practice(wk, "iPad", ipad)
+        flow_hide_reset(wk, "iPad", ipad)
         wk.close()
     bad = [r for r in RESULTS if not r[1]]
     print(f"\n{len(RESULTS) - len(bad)}/{len(RESULTS)} PASS")

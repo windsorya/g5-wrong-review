@@ -132,6 +132,13 @@ details[open]>summary{margin-bottom:12px}
     <div style="display:grid;gap:14px">
       <div class="row"><label for="snd">答對提示音</label><select id="snd" style="font-size:17px;min-height:46px;padding:6px 10px;border:2px solid var(--line);border-radius:12px;background:var(--card)"></select><button class="btn ghost sm" type="button" id="sndTry">試聽</button></div>
       <p class="small muted" style="margin:0">規則：每天第一次作答才算數。連續三個不同天都答對＝學會，之後每 7 天再出一次；答錯就從頭算，明天再練。「考前總複習」不管排程，該科每一題都會出。</p>
+      <div style="display:grid;gap:8px">
+        <span class="sect-t" style="font-size:17px">清除或重置</span>
+        <p class="small muted" style="margin:0">某一題不想再練：到「全部錯題清單」按那題的「不用再練」，之後也能恢復。想讓全部進度從頭開始：按下面清除。</p>
+        <div class="row"><button class="btn ghost sm" type="button" id="resetBtn">清除全部作答紀錄</button>
+          <span id="resetSure" hidden><button class="btn sm" type="button" id="resetYes" style="background:var(--bad)">確定清除</button> <button class="btn ghost sm" type="button" id="resetNo">不要清除</button></span></div>
+        <span class="small" id="resetMsg" role="status"></span>
+      </div>
       <p class="small muted" id="storeMsg" style="margin:0"></p>
     </div>
   </details>
@@ -193,7 +200,13 @@ function answer(val){
 }
 function next(){ sess.i++; sess.answered = false; sess.last = null; render(); var b = document.querySelector("#main .opt, #main input, #main .btn"); if (b) b.focus(); }
 
+function VIS(){ return C.visible(ITEMS, st); }
 function renderHome(){
+  var V = VIS();
+  if (ITEMS.length && !V.length) return '<div class="empty"><span class="sect-t">錯題都設成「不用再練」了</span><p style="margin:0">共 ' + ITEMS.length + ' 題，可以在下面「全部錯題清單」恢復。</p></div>';
+  return homeFor(V);
+}
+function homeFor(ITEMS){   // 參數 ITEMS＝沒被隱藏的題（刻意與外層同名：下面的首頁只看得到這些）
   var t = today(), due = C.dueList(ITEMS, st, t), S = C.stats(ITEMS, st, t), m = 0;
   Object.keys(S).forEach(function(k){ m += S[k].mastered; });
   if (!ITEMS.length) {
@@ -241,13 +254,19 @@ function renderDone(){
 }
 function renderList(){
   if (!ITEMS.length) return '<span class="muted">還沒有錯題。</span>';
-  var t = today();
-  return C.SUBJECTS.filter(function(s){ return ITEMS.some(function(it){ return it.subject === s; }); }).map(function(s){
-    return '<div style="display:grid;gap:6px"><h3>' + esc(s) + '</h3>' + ITEMS.filter(function(it){ return it.subject === s; }).map(function(it){
+  var t = today(), V = VIS(), H = ITEMS.filter(function(it){ return st.hidden[it.id]; });
+  var short = function(it){ return esc(it.q.length > 40 ? it.q.slice(0, 40) + "…" : it.q); };
+  var h = C.SUBJECTS.filter(function(s){ return V.some(function(it){ return it.subject === s; }); }).map(function(s){
+    return '<div style="display:grid;gap:6px"><h3>' + esc(s) + '</h3>' + V.filter(function(it){ return it.subject === s; }).map(function(it){
       var ss = C.status(st, it, t);
-      return '<div class="li"><b>' + esc(it.q.length > 40 ? it.q.slice(0, 40) + "…" : it.q) + '</b><span>' + esc(it.source) + '・<span class="st-' + ss.key + '">' + esc(ss.text) + '</span></span></div>';
+      return '<div class="li"><b>' + short(it) + '</b><span>' + esc(it.source) + '・<span class="st-' + ss.key + '">' + esc(ss.text) + '</span></span>' +
+        '<div><button class="btn ghost sm" type="button" data-hide="' + esc(it.id) + '">不用再練（藏起來）</button></div></div>';
     }).join("") + '</div>';
   }).join("");
+  if (H.length) h += '<details id="hiddenBox"><summary style="font-size:17px">已設成不用再練的 ' + H.length + ' 題（可恢復）</summary>' + H.map(function(it){
+    return '<div class="li"><b>' + short(it) + '</b><span>' + esc(it.subject) + '・' + esc(it.source) + '</span><div><button class="btn ghost sm" type="button" data-unhide="' + esc(it.id) + '">恢復，繼續練</button></div></div>';
+  }).join("") + '</details>';
+  return h || '<span class="muted">錯題都設成不用再練了。</span>';
 }
 function render(){
   var d = Math.round((Date.parse(EXAM + "T00:00:00+08:00") - Date.parse(today() + "T00:00:00+08:00")) / 86400000);
@@ -257,10 +276,20 @@ function render(){
   if (!sess) main.innerHTML = renderHome();
   else if (sess.i >= sess.queue.length) main.innerHTML = renderDone();
   else main.innerHTML = renderQuestion();
+  var hb0 = $("#hiddenBox"), keepOpen = !!(hb0 && hb0.open);   // 重繪前先記住「已隱藏」清單有沒有展開
   $("#list").innerHTML = renderList();
   $("#storeMsg").textContent = canStore ? "進度存在這台裝置（開啟跨裝置同步後也會存到家裡的雲端）。" : "這台裝置存不了進度。";
-  var go = $("#goToday"); if (go) go.onclick = function(){ start(C.dueList(ITEMS, st, today()), "今天的複習"); };
-  main.querySelectorAll(".sub").forEach(function(b){ b.onclick = function(){ var s = b.getAttribute("data-sub"); start(C.examList(ITEMS, st, s), (s || "全部科目") + "考前總複習"); }; });
+  var go = $("#goToday"); if (go) go.onclick = function(){ start(C.dueList(VIS(), st, today()), "今天的複習"); };
+  main.querySelectorAll(".sub").forEach(function(b){ b.onclick = function(){ var s = b.getAttribute("data-sub"); start(C.examList(VIS(), st, s), (s || "全部科目") + "考前總複習"); }; });
+  $("#list").querySelectorAll("[data-hide],[data-unhide]").forEach(function(b){ b.onclick = function(){
+    var id = b.getAttribute("data-hide") || b.getAttribute("data-unhide");
+    st = C.setHidden(st, id, b.hasAttribute("data-hide")); save(); render();
+  }; });
+  if (keepOpen && $("#hiddenBox")) $("#hiddenBox").open = true;
+  var rs = $("#resetBtn"), rc = $("#resetSure");
+  rs.onclick = function(){ rc.hidden = false; rs.hidden = true; $("#resetMsg").textContent = "真的要清除嗎？她練過的天數與學會的題目都會歸零（題目本身不會刪）。"; };
+  $("#resetNo").onclick = function(){ rc.hidden = true; rs.hidden = false; $("#resetMsg").textContent = ""; };
+  $("#resetYes").onclick = function(){ st = C.resetProgress(st); sess = null; save(); rc.hidden = true; rs.hidden = false; render(); $("#resetMsg").textContent = "已清除全部作答紀錄。"; };
   if (sess && sess.i < sess.queue.length) {
     var it = byId(sess.queue[sess.i]);
     main.querySelectorAll(".opt").forEach(function(b){ b.onclick = function(){ var k = +b.getAttribute("data-k"); answer(it.type === "tf" ? k === 0 : k); }; });

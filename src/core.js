@@ -69,7 +69,18 @@
     return it.a[0];
   }
 
-  function blank() { return { v: 1, it: {}, settings: { sound: true, tone: 0 } }; }
+  // hidden：爸媽按「不用再練」的題（2026-10-13 律師：「為何我測試用的題目，我沒法清除？有無清除或重置按鈕？」）——
+  //   只藏起來不刪，清單底下可以恢復；題目本身寫在題庫程式裡，各台裝置都一樣，所以藏的是「這個家不練它」。
+  function blank() { return { v: 1, it: {}, hidden: {}, settings: { sound: true, tone: 0 } }; }
+  function visible(items, state) { var h = (state && state.hidden) || {}; return items.filter(function (it) { return !h[it.id]; }); }
+  function setHidden(state, id, on) {
+    var st = JSON.parse(JSON.stringify(state));
+    st.hidden = st.hidden || {};
+    if (on) st.hidden[id] = true; else delete st.hidden[id];
+    return st;
+  }
+  // 清除全部作答紀錄：進度歸零，保留提示音設定與「不用再練」名單（那是爸媽的選擇，不是作答紀錄）
+  function resetProgress(state) { var st = blank(); st.settings = JSON.parse(JSON.stringify(state.settings)); st.hidden = JSON.parse(JSON.stringify(state.hidden || {})); return st; }
   // 讀進來的紀錄一律重新整理：壞掉的欄位丟掉，不讓一筆壞資料弄壞整頁
   function clean(raw) {
     var st = blank();
@@ -77,6 +88,9 @@
     if (raw.settings && typeof raw.settings === "object") {
       st.settings.sound = raw.settings.sound !== false;
       st.settings.tone = Number.isInteger(raw.settings.tone) && raw.settings.tone >= 0 && raw.settings.tone < 10 ? raw.settings.tone : 0;
+    }
+    if (raw.hidden && typeof raw.hidden === "object") {
+      Object.keys(raw.hidden).forEach(function (id) { if (/^[\w-]{1,60}$/.test(id) && raw.hidden[id] === true) st.hidden[id] = true; });
     }
     var src = raw.it && typeof raw.it === "object" ? raw.it : {};
     Object.keys(src).forEach(function (id) {
@@ -157,7 +171,7 @@
   var api = {
     SUBJECTS: SUBJECTS, TYPES: TYPES, MASTER: MASTER, GAP: GAP, KEEP: KEEP, LOG_MAX: LOG_MAX,
     dayKey: dayKey, addDays: addDays, isDay: isDay, itemProblems: itemProblems, norm: norm, isRight: isRight, answerText: answerText,
-    blank: blank, clean: clean, record: record, dueList: dueList, examList: examList, stats: stats, status: status
+    blank: blank, clean: clean, visible: visible, setHidden: setHidden, resetProgress: resetProgress, record: record, dueList: dueList, examList: examList, stats: stats, status: status
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.G5WrongCore = api;
 })(typeof window !== "undefined" ? window : this);

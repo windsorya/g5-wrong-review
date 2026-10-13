@@ -126,3 +126,30 @@ test("狀態文字：還沒練、今天要練、等幾天、學會", () => {
   ["2026-10-14", "2026-10-17"].forEach((d) => { st = C.record(st, "a", true, d).state; });
   assert.equal(C.status(st, it, "2026-10-17").key, "done");
 });
+
+test("不用再練（隱藏）：只藏不刪、可恢復、不改舊 state", () => {
+  const items = [item({ id: "a" }), item({ id: "b" })];
+  const st0 = C.blank();
+  const st1 = C.setHidden(st0, "a", true);
+  assert.deepEqual(C.visible(items, st1).map((x) => x.id), ["b"]);
+  assert.deepEqual(st0.hidden, {});
+  const st2 = C.setHidden(st1, "a", false);
+  assert.deepEqual(C.visible(items, st2).map((x) => x.id), ["a", "b"]);
+  assert.equal(C.visible(items, { v: 1, it: {} }).length, 2);   // 舊紀錄沒有 hidden 欄也照常
+});
+
+test("清除全部作答紀錄：進度歸零，保留提示音設定與隱藏名單", () => {
+  let st = C.blank();
+  st = C.record(st, "a", true, D0).state;
+  st.settings = { sound: false, tone: 4 };
+  st = C.setHidden(st, "b", true);
+  const r = C.resetProgress(st);
+  assert.deepEqual(r.it, {}); assert.deepEqual(r.settings, { sound: false, tone: 4 }); assert.deepEqual(r.hidden, { b: true });
+  assert.equal(Object.keys(st.it).length, 1);   // 不改舊的
+});
+
+test("讀進來的隱藏名單：只收合法 id 且值為 true", () => {
+  const c = C.clean({ v: 1, it: {}, hidden: { ok: true, no: 1, "壞 id": true } });
+  assert.deepEqual(c.hidden, { ok: true });
+  assert.deepEqual(C.clean({ v: 1, it: {}, hidden: "x" }).hidden, {});
+});
