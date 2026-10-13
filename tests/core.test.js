@@ -105,16 +105,20 @@ test("考前總複習：該科每題都出（含學會、未到期），沒學�
   assert.deepEqual(S["數學"], { total: 2, mastered: 1, due: 1 }); assert.deepEqual(S["國語"], { total: 1, mastered: 0, due: 1 });
 });
 
-test("讀進來的紀錄：壞掉的欄位丟掉，不弄壞整頁", () => {
-  assert.deepEqual(C.clean(null), C.blank()); assert.deepEqual(C.clean({ v: 2, it: { a: {} } }), C.blank()); assert.deepEqual(C.clean("x"), C.blank());
-  const c = C.clean({ v: 1, settings: { sound: false, tone: 99 }, it: {
-    ok1: { n: 3, ok: 2, bad: 1, s: 9, m: true, last: "2026-10-13", due: "2026-10-20", log: [["2026-10-13", 1], ["壞", 1], ["2026-10-12", 5]] },
-    "壞 id": { n: 1 }, nul: null, neg: { n: -1, ok: "3", due: "明天" },
-  } });
-  assert.deepEqual(Object.keys(c.it).sort(), ["neg", "ok1"]);
-  assert.equal(c.it.ok1.s, C.MASTER); assert.deepEqual(c.it.ok1.log, [["2026-10-13", 1]]);
-  assert.equal(c.it.neg.n, 0); assert.equal(c.it.neg.ok, 0); assert.equal(c.it.neg.due, "");
-  assert.equal(c.settings.sound, false); assert.equal(c.settings.tone, 0);
+test("讀進來的紀錄：壞掉的欄位丟掉，不弄壞整頁（v1 遷移與 v2 同一套欄位整理）", () => {
+  ["null", '{"v":3,"it":{}}', '"x"'].forEach((raw) => assert.equal(C.decode(raw).ok, false, raw));   // 讀不懂≠空白（設計書第 7 條）
+  assert.deepEqual(C.decode(null).st, C.blank());
+  [1, 2].forEach((v) => {
+    const d = C.decode(JSON.stringify({ v, settings: { sound: false, tone: 99 }, it: {
+      ok1: { n: 3, ok: 2, bad: 1, s: 9, m: true, last: "2026-10-13", due: "2026-10-20", log: [["2026-10-13", 1], ["壞", 1], ["2026-10-12", 5]] },
+      "壞 id": { n: 1 }, nul: null, neg: { n: -1, ok: "3", due: "明天" },
+    } }));
+    assert.equal(d.ok, true); const c = d.st;
+    assert.deepEqual(Object.keys(c.it).sort(), ["neg", "ok1"]);
+    assert.equal(c.it.ok1.s, C.MASTER); assert.deepEqual(c.it.ok1.log, [["2026-10-13", 1]]);
+    assert.equal(c.it.neg.n, 0); assert.equal(c.it.neg.ok, 0); assert.equal(c.it.neg.due, "");
+    assert.equal(c.settings.sound, false); assert.equal(c.settings.tone, 0); assert.equal(c.v, 2);
+  });
 });
 
 test("紀錄長度上限：最多留 LOG_MAX 筆", () => {
@@ -142,7 +146,8 @@ test("不用再練（隱藏）：只藏不刪、可恢復、不改舊 state", ()
   assert.deepEqual(st0.hidden, {});
   const st2 = C.setHidden(st1, "a", false);
   assert.deepEqual(C.visible(items, st2).map((x) => x.id), ["a", "b"]);
-  assert.equal(C.visible(items, { v: 1, it: {} }).length, 2);   // 舊紀錄沒有 hidden 欄也照常
+  assert.equal(C.visible(items, { v: 2, it: {} }).length, 2);   // 沒有 hidden 欄也照常
+  assert.deepEqual(st2.hidden, {});                               // 恢復＝拿掉，不留負數時間戳
 });
 
 test("清除全部作答紀錄：進度歸零，保留提示音設定與隱藏名單", () => {
@@ -155,52 +160,21 @@ test("清除全部作答紀錄：進度歸零，保留提示音設定與隱藏�
   assert.equal(Object.keys(st.it).length, 1);   // 不改舊的
 });
 
-test("讀進來的隱藏名單：只收合法 id 且值為 true", () => {
-  const c = C.clean({ v: 1, it: {}, hidden: { ok: true, ts: 1760000000000, back: -5, zero: 0, str: "1", "壞 id": true } });
-  assert.deepEqual(c.hidden, { ok: 1, ts: 1760000000000, back: -5 });   // 舊版 true 視為很早以前隱藏；負數＝已恢復
+test("讀進來的隱藏名單：v1 的 true／正數＝隱藏、負數＝已恢復；v2 只收合法 id 且值為 true", () => {
+  const c = C.decode(JSON.stringify({ v: 1, it: {}, hidden: { ok: true, ts: 1760000000000, back: -5, zero: 0, str: "1", "壞 id": true } })).st;
+  assert.deepEqual(c.hidden, { ok: true, ts: true });
   assert.ok(C.isHidden(c, "ok") && C.isHidden(c, "ts") && !C.isHidden(c, "back"));
-  assert.deepEqual(C.clean({ v: 1, it: {}, hidden: "x" }).hidden, {});
+  assert.equal(C.decode(JSON.stringify({ v: 1, it: {}, hidden: "x" })).ok, false);   // 容器型別不對＝讀不懂，不當空白
+  assert.deepEqual(C.decode(JSON.stringify({ v: 2, it: {}, hidden: { a: true, b: 1, c: "true" } })).st.hidden, { a: true });
 });
 
-// ===== 逐題合併（Codex 審 151f6f09、cf61e0ff 的反例，逐一寫成測試）=====
-const rec = (st, id, ok, now) => C.record(st, id, ok, C.dayKey(now), now).state;
-test("合併①存不進去的期間：記憶體的 a、b 不會被重讀蓋掉，之後存得進去 a、b、c 都在", () => {
-  const disk = C.blank();                                   // 存檔一直是空的（a、b 都沒存進去）
-  let mem = rec(rec(C.blank(), "a", true, 1000), "b", true, 2000);
-  mem = C.merge(disk, mem);                                 // 重讀（fresh）
-  mem = rec(mem, "c", true, 3000);
-  assert.deepEqual(Object.keys(C.merge(disk, mem).it).sort(), ["a", "b", "c"]);
-});
-
-test("合併②讀寫交錯：A 讀完、B 存了 b、A 再存 a ⇒ a、b 都在", () => {
-  const disk0 = C.blank();
-  let A = C.merge(disk0, C.blank());                        // A 讀到空的
-  const diskB = C.merge(disk0, rec(C.blank(), "b", true, 2000));   // B 存了 b
-  A = rec(A, "a", true, 2500);                              // A 手上沒有 b
-  assert.deepEqual(Object.keys(C.merge(diskB, A).it).sort(), ["a", "b"]);
-});
-
-test("合併③別頁清除後：這頁手上的舊紀錄不復活，清除後新答的照留", () => {
-  let A = rec(C.blank(), "old", true, 1000);                // A 手上有舊紀錄
-  const diskReset = C.resetProgress(C.merge(C.blank(), A), 5000);  // B 在 5000 清除
-  A = rec(A, "new", true, 6000);                            // A 沒看到清除，又答一題
-  const m = C.merge(diskReset, A);
-  assert.deepEqual(Object.keys(m.it), ["new"]); assert.equal(m.resetAt, 5000);
-  const m2 = C.merge(A, diskReset);                         // 反過來合併也一樣
-  assert.deepEqual(Object.keys(m2.it), ["new"]);
-});
-
-test("合併④同一題兩頁都答：取較新的那筆；隱藏與恢復取較新的設定", () => {
-  const a1 = rec(C.blank(), "q", false, 1000), a2 = rec(C.blank(), "q", true, 2000);
-  assert.equal(C.merge(a1, a2).it.q.ok, 1); assert.equal(C.merge(a2, a1).it.q.ok, 1);
-  const hid = C.setHidden(C.blank(), "q", true, 3000), back = C.setHidden(C.blank(), "q", false, 4000);
-  assert.ok(!C.isHidden(C.merge(hid, back), "q")); assert.ok(!C.isHidden(C.merge(back, hid), "q"));
-  assert.ok(C.isHidden(C.merge(C.blank(), hid), "q"));      // 別頁剛隱藏、這頁沒動 ⇒ 合併後是隱藏
-});
-
-test("合併⑤舊版存檔（沒有 t、hidden 是 true）：合併不丟資料；清除後才作廢", () => {
-  const legacy = C.clean({ v: 1, it: { x: { n: 1, ok: 1, bad: 0, s: 1, m: false, last: "2026-10-13", due: "2026-10-14", log: [] } }, hidden: { y: true } });
-  const m = C.merge(legacy, C.blank());
-  assert.deepEqual(Object.keys(m.it), ["x"]); assert.ok(C.isHidden(m, "y"));
-  assert.deepEqual(C.merge(legacy, C.resetProgress(legacy, 9000)).it, {});
+// ===== 原「逐題合併」反例（Codex 審 151f6f09、cf61e0ff）=====
+// 2026-10-13 改為單一寫入分頁（Codex 設計者方案 b）後，merge() 已移除；同一批反例改用新語意驗證，放在 tests/storage.test.js：
+//   合併①存不進去期間記憶體不被重讀蓋掉 → 07；②讀寫交錯 → 10（另一頁沒有寫入資格）與 02（接手後保存）；
+//   ③別頁清除後舊紀錄不復活 → 03、16；④兩頁同答同一題 → 01、28（第二頁唯讀）；⑤舊版存檔 → 下面這支與 25、26。
+test("合併⑤舊版存檔（沒有 t、hidden 是 true）：遷移不丟資料；之後清除才作廢", () => {
+  const d = C.decode(JSON.stringify({ v: 1, it: { x: { n: 1, ok: 1, bad: 0, s: 1, m: false, last: "2026-10-13", due: "2026-10-14", log: [] } }, hidden: { y: true } }));
+  assert.equal(d.from, 1);
+  assert.deepEqual(Object.keys(d.st.it), ["x"]); assert.ok(C.isHidden(d.st, "y")); assert.equal(d.st.it.x.t, undefined);
+  assert.deepEqual(C.resetProgress(d.st).it, {}); assert.ok(C.isHidden(C.resetProgress(d.st), "y"));
 });

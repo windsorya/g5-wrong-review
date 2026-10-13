@@ -285,80 +285,73 @@ details[open]>summary{margin-bottom:12px}
 
   // hidden：爸媽按「不用再練」的題（2026-10-13 律師：「為何我測試用的題目，我沒法清除？有無清除或重置按鈕？」）——
   //   只藏起來不刪，清單底下可以恢復；題目本身寫在題庫程式裡，各台裝置都一樣，所以藏的是「這個家不練它」。
-  // 資料模型（Codex 審 151f6f09、cf61e0ff 連兩輪抓到多分頁／存檔失敗的覆蓋問題後改）：
-  //   紀錄不是「整份誰最後寫誰贏」，而是逐題合併——每題作答紀錄 it[id].t、每個隱藏設定 hidden[id] 都帶修改時間（毫秒），
-  //   清除＝記一個 resetAt（之前的作答紀錄一律作廢）。merge(甲, 乙) 逐題取較新的那筆，所以：
-  //   ・兩個分頁各寫各的題，不會互相蓋掉；・存不進去時記憶體裡的進度不會被重讀蓋掉，下次存得進去就一起存；
-  //   ・別頁清除後，這頁舊的紀錄比 resetAt 舊，合併時自動丟掉，不會復活。
-  //   hidden[id]：正數＝那個時間設成不用再練；負數＝那個時間恢復（留著是為了合併時比得出誰新）；舊版的 true 視為很早以前隱藏。
-  function blank() { return { v: 1, it: {}, hidden: {}, resetAt: 0, settings: { sound: true, tone: 0 } }; }
-  function isHidden(state, id) { var h = (state && state.hidden) || {}; return h[id] === true || (typeof h[id] === "number" && h[id] > 0); }
+  // 存檔格式 v2（Codex 設計者方案 b，docs/storage-design-b-codex-designer-20261013.md）：
+  //   {v:2, it:{題id: 作答紀錄}, hidden:{題id: true}, settings:{sound, tone}}。
+  //   同一時間只有一個分頁能寫（Web Locks，見下方 createController），所以不再需要修改時間 t、清除標記 resetAt 與逐題合併：
+  //   寫入＝把主頁記憶體整份存進去；舊版 v1 的 t／resetAt 只在遷移時用一次。
+  var V = 2, KEY = "g5wrong.v1", LOCK = "g5wrong.v1:writer";
+  function blank() { return { v: V, it: {}, hidden: {}, settings: { sound: true, tone: 0 } }; }
+  function copy(x) { return JSON.parse(JSON.stringify(x)); }
+  function isHidden(state, id) { return !!(state && state.hidden && state.hidden[id] === true); }
   function visible(items, state) { return items.filter(function (it) { return !isHidden(state, it.id); }); }
-  function setHidden(state, id, on, now) {
-    var st = JSON.parse(JSON.stringify(state)), t = Math.max(1, now || Date.now());
+  function setHidden(state, id, on) {
+    var st = copy(state);
     st.hidden = st.hidden || {};
-    st.hidden[id] = on ? t : -t;
+    if (on) st.hidden[id] = true; else delete st.hidden[id];
     return st;
   }
   // 清除全部作答紀錄：進度歸零，保留提示音設定與「不用再練」名單（那是爸媽的選擇，不是作答紀錄）
-  function resetProgress(state, now) {
+  function resetProgress(state) {
     var st = blank();
-    st.settings = JSON.parse(JSON.stringify(state.settings)); st.hidden = JSON.parse(JSON.stringify(state.hidden || {}));
-    st.resetAt = Math.max(state.resetAt || 0, now || Date.now());
+    st.settings = copy(state.settings); st.hidden = copy(state.hidden || {});
     return st;
   }
-  // 逐題合併：base＝存檔裡讀到的、mine＝這個分頁記憶體裡的；設定以 mine 為準（是這頁剛改的）
-  function merge(base, mine) {
-    var st = blank(), ids = {};
-    st.settings = JSON.parse(JSON.stringify(mine.settings));
-    st.resetAt = Math.max(base.resetAt || 0, mine.resetAt || 0);
-    Object.keys(base.it).concat(Object.keys(mine.it)).forEach(function (id) { ids[id] = 1; });
-    Object.keys(ids).forEach(function (id) {
-      var a = base.it[id], b = mine.it[id], w = !a ? b : !b ? a : ((b.t || 0) >= (a.t || 0) ? b : a);
-      if ((w.t || 0) >= st.resetAt) st.it[id] = JSON.parse(JSON.stringify(w));
-    });
-    var hv = function (x) { return x === true ? 1 : typeof x === "number" ? x : 0; };
-    Object.keys(base.hidden || {}).concat(Object.keys(mine.hidden || {})).forEach(function (id) {
-      var a = hv((base.hidden || {})[id]), b = hv((mine.hidden || {})[id]);
-      st.hidden[id] = Math.abs(b) >= Math.abs(a) ? b : a;
-    });
+  var ID = /^[\w-]{1,60}$/;
+  function isObj(x) { return !!x && typeof x === "object" && !Array.isArray(x); }
+  // 一筆作答紀錄的欄位整理：壞掉的欄位丟掉（設成預設值），不讓一筆壞資料弄壞整頁
+  function cleanEntry(e) {
+    var n = function (x) { return Number.isInteger(x) && x >= 0 ? x : 0; };
+    return {
+      n: n(e.n), ok: n(e.ok), bad: n(e.bad), s: Math.min(n(e.s), MASTER), m: e.m === true,
+      last: isDay(e.last) ? e.last : "", due: isDay(e.due) ? e.due : "",
+      log: Array.isArray(e.log) ? e.log.filter(function (l) { return Array.isArray(l) && isDay(l[0]) && (l[1] === 0 || l[1] === 1); }).slice(-LOG_MAX) : []
+    };
+  }
+  function cleanSettings(raw) {
+    var st = { sound: true, tone: 0 };
+    if (isObj(raw)) {
+      st.sound = raw.sound !== false;
+      st.tone = Number.isInteger(raw.tone) && raw.tone >= 0 && raw.tone < 10 ? raw.tone : 0;
+    }
     return st;
   }
-  // 讀進來的紀錄一律重新整理：壞掉的欄位丟掉，不讓一筆壞資料弄壞整頁
-  function clean(raw) {
-    var st = blank();
-    if (!raw || typeof raw !== "object" || raw.v !== 1) return st;
-    if (raw.settings && typeof raw.settings === "object") {
-      st.settings.sound = raw.settings.sound !== false;
-      st.settings.tone = Number.isInteger(raw.settings.tone) && raw.settings.tone >= 0 && raw.settings.tone < 10 ? raw.settings.tone : 0;
+  // 讀存檔（原始字串或 null）。回傳 {ok:true, from:null|1|2, st} 或 {ok:false}。
+  //   null＝真的沒有存檔（新裝置）；from:1＝舊版，呼叫端要先把 st 寫成 v2 成功才能開放作答；
+  //   壞 JSON、容器型別不對、未知版本 ⇒ ok:false，絕不當成空白（否則下一次存檔就把原本的紀錄蓋掉）。
+  function decode(raw) {
+    if (raw === null || raw === undefined) return { ok: true, from: null, st: blank() };
+    var o;
+    try { o = JSON.parse(raw); } catch (e) { return { ok: false }; }
+    if (!isObj(o) || (o.v !== 1 && o.v !== 2)) return { ok: false };
+    if ((o.it !== undefined && !isObj(o.it)) || (o.hidden !== undefined && !isObj(o.hidden)) || (o.settings !== undefined && !isObj(o.settings))) return { ok: false };
+    var st = blank(), src = o.it || {}, hid = o.hidden || {};
+    st.settings = cleanSettings(o.settings);
+    if (o.v === 2) {
+      Object.keys(hid).forEach(function (id) { if (ID.test(id) && hid[id] === true) st.hidden[id] = true; });
+      Object.keys(src).forEach(function (id) { if (ID.test(id) && isObj(src[id])) st.it[id] = cleanEntry(src[id]); });
+      return { ok: true, from: 2, st: st };
     }
-    if (raw.hidden && typeof raw.hidden === "object") {
-      Object.keys(raw.hidden).forEach(function (id) {
-        var x = raw.hidden[id];
-        if (!/^[\w-]{1,60}$/.test(id)) return;
-        if (x === true) st.hidden[id] = 1;   // 舊版格式
-        else if (typeof x === "number" && Number.isFinite(x) && x !== 0) st.hidden[id] = x;
-      });
-    }
-    st.resetAt = Number.isInteger(raw.resetAt) && raw.resetAt > 0 ? raw.resetAt : 0;
-    var src = raw.it && typeof raw.it === "object" ? raw.it : {};
-    Object.keys(src).forEach(function (id) {
-      var e = src[id];
-      if (!/^[\w-]{1,60}$/.test(id) || !e || typeof e !== "object") return;
-      var n = function (x) { return Number.isInteger(x) && x >= 0 ? x : 0; };
-      st.it[id] = {
-        n: n(e.n), ok: n(e.ok), bad: n(e.bad), s: Math.min(n(e.s), MASTER), m: e.m === true,
-        last: isDay(e.last) ? e.last : "", due: isDay(e.due) ? e.due : "", t: n(e.t),
-        log: Array.isArray(e.log) ? e.log.filter(function (l) { return Array.isArray(l) && isDay(l[0]) && (l[1] === 0 || l[1] === 1); }).slice(-LOG_MAX) : []
-      };
-    });
-    return st;
+    // v1 遷移（設計書第 7 條）：hidden 為 true 或正數＝隱藏、負數＝已恢復；作答紀錄依舊判準 t >= resetAt 整理一次（缺少視為 0）。
+    // 相等時間曾造成的清除歧義無法追溯推定，保留資料（讓家長重新清除）。
+    var num = function (x) { return typeof x === "number" && Number.isFinite(x) ? x : 0; }, resetAt = num(o.resetAt);
+    Object.keys(hid).forEach(function (id) { var x = hid[id]; if (ID.test(id) && (x === true || (typeof x === "number" && Number.isFinite(x) && x > 0))) st.hidden[id] = true; });
+    Object.keys(src).forEach(function (id) { var e = src[id]; if (ID.test(id) && isObj(e) && num(e.t) >= resetAt) st.it[id] = cleanEntry(e); });
+    return { ok: true, from: 1, st: st };
   }
 
   // 記一次作答。回傳新的 state（不改舊的），以及這次有沒有算進進度（counted）。
-  function record(state, id, right, today, now) {
-    var st = JSON.parse(JSON.stringify(state)), e = st.it[id] || { n: 0, ok: 0, bad: 0, s: 0, m: false, last: "", due: "", log: [], t: 0 };
-    e.t = Math.max((e.t || 0) + 1, now || Date.now(), st.resetAt || 0);   // 修改時間（逐題合併用），一定比舊的新、不早於清除時間
+  function record(state, id, right, today) {
+    var st = copy(state), e = st.it[id] || { n: 0, ok: 0, bad: 0, s: 0, m: false, last: "", due: "", log: [] };
     e.n += 1; if (right) e.ok += 1; else e.bad += 1;
     e.log.push([today, right ? 1 : 0]); if (e.log.length > LOG_MAX) e.log = e.log.slice(-LOG_MAX);
     var counted = e.last !== today;
@@ -418,10 +411,221 @@ details[open]>summary{margin-bottom:12px}
     return { key: "due", text: e.s ? "連對 " + e.s + " 天，今天要練" : "今天要練" };
   }
 
+  // ===== 單一寫入分頁（Codex 設計者方案 b 的七條契約；node 測試 tests/storage.test.js 用替身驅動同一份程式）=====
+  // ①取鎖且讀取成功（READY）才接受修改；其他分頁唯讀，每個操作入口都再檢查一次寫入資格。BroadcastChannel 只用來「請對方讓出」，不選主、不轉送答案。
+  // ②接手一定重新讀存檔；主頁只在「首頁、沒有未存進度」時讓出；不以逾時搶鎖；沒有 Web Locks 就停用修改。
+  // ③載入後主頁記憶體是唯一工作狀態：save() 直接把記憶體整份寫進去，不重讀、不合併。
+  // ④寫入失敗：記憶體照留、標 DIRTY、單一重試計時器（每次寫當下完整 state，不重播答案）＋手動重試。
+  // ⑤清除用候選狀態，寫成功才採用並結束複習；失敗什麼都不變。
+  // ⑥每個畫面操作帶 token {gen, qid}：寫入資格、READY、世代、題目都對才接受；答案接受一次就消耗。
+  // ⑦v1→v2 遷移寫成功才 READY；壞格式、未知版本不當空白、不寫。
+  // env：storage（getItem/setItem）、locks（navigator.locks 或 null）、items、now()、setTimeout/clearTimeout、post(訊息給別的分頁)、onChange()、onWriter(是否可寫)
+  var RETRY_MS = 3000;
+  var MSG = {
+    ro: "另一個分頁正在練習，請回那一頁。",
+    nolock: "這個瀏覽器無法安全儲存練習紀錄（太舊或被限制），先不能練習；請更新 iPad／瀏覽器後再開。",
+    lockfail: "這一頁拿不到存檔的權限（瀏覽器拒絕），無法安全儲存，先不能練習；請重新整理或換瀏覽器。",
+    readfail: "讀不到原本紀錄，請再讀一次（原本的紀錄沒有動）。",
+    badfile: "這台裝置上的錯題紀錄讀不懂（格式不對），為了不蓋掉原本的紀錄，先不能練習。請找爸媽處理。",
+    migratefail: "舊版紀錄要換成新格式，但這台裝置現在存不進去；原本的紀錄沒有動，請再讀一次。",
+    notready: "還沒讀到原本的紀錄，請先按「再讀一次」。",
+    resetFail: "沒有清除成功：這台裝置現在存不了資料，紀錄維持原樣。",
+    resetOk: "已清除全部作答紀錄。"
+  };
+  function createController(env) {
+    var storage = env.storage || null, locks = env.locks || null, items = env.items || [];
+    var now = env.now || function () { return Date.now(); };
+    var setT = env.setTimeout || function (f, ms) { return setTimeout(f, ms); };
+    var clrT = env.clearTimeout || function (i) { clearTimeout(i); };
+    var post = env.post || function () {}, onChange = env.onChange || function () {}, onWriter = env.onWriter || function () {};
+    var S = { mode: "BOOT", writer: false, ready: false, dirty: false, touched: false, st: blank(), sess: null, gen: 0, retry: null, release: null, waiting: false };
+    var byId = {}; items.forEach(function (it) { byId[it.id] = it; });
+
+    function emit() { try { onChange(); } catch (e) {} }
+    function no(reason) {
+      var m = reason === "ro" ? MSG.ro : reason === "nolock" ? (S.mode === "LOCKFAIL" ? MSG.lockfail : MSG.nolock) : reason === "notready" ? MSG.notready : "";
+      return { ok: false, reason: reason, msg: m };
+    }
+    // 寫入資格（每個修改入口都先過這裡）
+    function gate(tok) {
+      if (!S.writer) return no(S.mode === "NOLOCK" || S.mode === "LOCKFAIL" ? "nolock" : "ro");
+      if (!S.ready) return no("notready");
+      if (!tok || tok.gen !== S.gen) return no("stale");
+      return null;
+    }
+    function curId() { var s = S.sess; return s && s.i < s.queue.length ? s.queue[s.i] : null; }
+    function skipHidden() {
+      var s = S.sess; if (!s || s.answered) return;
+      while (s.i < s.queue.length && (isHidden(S.st, s.queue[s.i]) || !byId[s.queue[s.i]])) s.i++;
+    }
+    function arm() {
+      if (S.retry !== null) return;
+      S.retry = setT(function () { S.retry = null; if (S.dirty && S.writer && S.ready) { save(); emit(); } }, RETRY_MS);
+    }
+    function disarm() { if (S.retry !== null) { clrT(S.retry); S.retry = null; } }
+    function save() {
+      if (!S.writer || !S.ready) return false;
+      try { storage.setItem(KEY, JSON.stringify(S.st)); }
+      catch (e) { S.dirty = true; arm(); return false; }
+      S.dirty = false; disarm(); return true;
+    }
+    // 讀存檔（只在取得寫入資格時、按「再讀一次」時）：成功才 READY
+    function load() {
+      S.ready = false; S.dirty = false; disarm();
+      var raw;
+      try { if (!storage) throw new Error("no storage"); raw = storage.getItem(KEY); } catch (e) { S.mode = "READFAIL"; return; }
+      var d = decode(raw);
+      if (!d.ok) { S.mode = "BADFILE"; S.st = blank(); return; }
+      if (d.from === 1) {
+        try { storage.setItem(KEY, JSON.stringify(d.st)); } catch (e) { S.mode = "MIGRATEFAIL"; return; }
+      }
+      S.st = d.st; S.ready = true; S.mode = "READY";
+    }
+    // 唯讀分頁：只為了顯示讀一下（不寫、不當工作狀態；接手時一定重讀）
+    function loadView() {
+      try { var d = storage ? decode(storage.getItem(KEY)) : { ok: false }; S.st = d.ok ? d.st : blank(); } catch (e) { S.st = blank(); }
+    }
+    function hold() {
+      S.writer = true; S.waiting = false; S.sess = null; S.touched = false; S.gen++;
+      load();
+      emit(); try { onWriter(true); } catch (e) {}
+      return new Promise(function (res) { S.release = res; });
+    }
+    function waitLock() {
+      if (S.waiting) return;
+      S.waiting = true;
+      try { locks.request(LOCK, function () { return hold(); }).catch(function () { S.waiting = false; }); } catch (e) { S.waiting = false; }
+    }
+    function lockFail() { S.writer = false; S.ready = false; S.mode = "LOCKFAIL"; loadView(); emit(); }
+    function boot() {
+      if (!locks || typeof locks.request !== "function") { S.mode = "NOLOCK"; loadView(); emit(); return; }
+      try {
+        locks.request(LOCK, { ifAvailable: true }, function (lock) {
+          if (!lock) { S.mode = "RO"; loadView(); emit(); waitLock(); return; }
+          return hold();
+        }).catch(lockFail);
+      } catch (e) { lockFail(); }
+    }
+    // 主頁讓出：只在首頁、沒有未存進度時（練習中、DIRTY 都不讓）
+    function yieldLock() {
+      if (!S.writer || S.sess || S.dirty) return false;
+      var r = S.release;
+      S.writer = false; S.ready = false; S.mode = "RO"; S.release = null; S.gen++; disarm();
+      try { onWriter(false); } catch (e) {}
+      loadView(); emit();
+      if (r) r();
+      waitLock();
+      return true;
+    }
+    function message(m) {
+      if (m === "want") { if (S.writer && !yieldLock()) post("busy"); }
+      else if (m === "busy" && !S.writer) { S.busy = true; emit(); }
+    }
+    function askTakeover() { if (S.writer || !locks) return false; S.busy = false; post("want"); return true; }
+    function refreshView() { if (!S.writer) { loadView(); emit(); } }
+
+    function token() { return { gen: S.gen, qid: curId() }; }
+    function start(tok, list, label) {
+      var g = gate(tok); if (g) return g;
+      if (!list.length) return { ok: false, reason: "empty", msg: "" };
+      S.sess = { label: label, queue: list.map(function (it) { return it.id; }), i: 0, right: 0, wrong: 0, requeued: {}, answered: false, last: null, mastered: 0 };
+      skipHidden(); S.gen++; emit();
+      return { ok: true };
+    }
+    function startToday(tok) { return start(tok, dueList(visible(items, S.st), S.st, dayKey(now())), "今天的複習"); }
+    function startExam(tok, subject) { return start(tok, examList(visible(items, S.st), S.st, subject), (subject || "全部科目") + "考前總複習"); }
+    function answer(tok, val) {
+      var g = gate(tok); if (g) return g;
+      var s = S.sess, id = curId();
+      if (!s || !id || tok.qid !== id) return no("stale");
+      if (s.answered) return no("answered");
+      if (isHidden(S.st, id) || !byId[id]) return no("hidden");
+      var it = byId[id], ok = isRight(it, val), wasM = !!(S.st.it[id] || {}).m;
+      var r = record(S.st, id, ok, dayKey(now()));
+      S.st = r.state; S.touched = true;
+      s.answered = true; s.last = { val: val, ok: ok, counted: r.counted };
+      if (ok) { s.right++; if (!wasM && S.st.it[id].m) s.mastered++; }
+      else { s.wrong++; if (!s.requeued[id]) { s.requeued[id] = 1; s.queue.push(id); } }
+      S.gen++;
+      var saved = save();
+      emit();
+      return { ok: true, right: ok, counted: r.counted, saved: saved, chime: ok && S.st.settings.sound !== false };
+    }
+    function next(tok) {
+      var g = gate(tok); if (g) return g;
+      var s = S.sess; if (!s || !s.answered || tok.qid !== curId()) return no("stale");
+      s.i++; s.answered = false; s.last = null; skipHidden(); S.gen++; emit();
+      return { ok: true };
+    }
+    function home(tok) {
+      var g = gate(tok); if (g) return g;
+      S.sess = null; S.gen++; emit();
+      return { ok: true };
+    }
+    function setHiddenOp(tok, id, on) {
+      var g = gate(tok); if (g) return g;
+      if (!ID.test(String(id))) return no("stale");
+      S.st = setHidden(S.st, id, !!on); S.touched = true;
+      skipHidden(); S.gen++;
+      var saved = save(); emit();
+      return { ok: true, saved: saved };
+    }
+    function setSound(tok, sound, tone) {
+      var g = gate(tok); if (g) return g;
+      var t = Number.isInteger(tone) && tone >= 0 && tone < 10 ? tone : S.st.settings.tone;
+      S.st = copy(S.st); S.st.settings = { sound: !!sound, tone: t }; S.touched = true;
+      var saved = save(); emit();
+      return { ok: true, saved: saved };
+    }
+    function reset(tok) {
+      var g = gate(tok); if (g) return g;
+      var cand = resetProgress(S.st);
+      try { storage.setItem(KEY, JSON.stringify(cand)); }
+      catch (e) { emit(); return { ok: false, reason: "save", msg: MSG.resetFail }; }
+      S.st = cand; S.dirty = false; disarm(); S.sess = null; S.touched = true; S.gen++; emit();
+      return { ok: true, msg: MSG.resetOk };
+    }
+    function retrySave() {
+      if (!S.writer || !S.ready || !S.dirty) return false;
+      var ok = save(); emit(); return ok;
+    }
+    function reread() {
+      if (!S.writer) return no(S.mode === "NOLOCK" || S.mode === "LOCKFAIL" ? "nolock" : "ro");
+      if (S.ready) return { ok: false, reason: "ready", msg: "" };   // 已經讀成功：舊的「再讀一次」重播不能把記憶體換回磁碟版
+      load(); S.sess = null; S.gen++; emit();
+      return S.ready ? { ok: true } : { ok: false, reason: "notready", msg: viewMsg() };
+    }
+    // 同步（g5-help/sync.js 的 canReplace／accept）：只有主頁、首頁、沒有未存進度、本頁載入後還沒有自己的修改時，才接受雲端整份換上。
+    // 寫進主 key 成功才採用；只接受合法 v2（壞的、舊版 v1 都不接，等那台更新後上傳 v2）。
+    function canReplace(key) { return key === KEY && S.writer && S.ready && !S.sess && !S.dirty && !S.touched; }
+    function accept(key, raw) {
+      if (!canReplace(key) || typeof raw !== "string") return false;
+      var d = decode(raw); if (!d.ok || d.from !== 2) return false;
+      try { storage.setItem(KEY, raw); } catch (e) { return false; }
+      S.st = d.st; S.gen++; emit();
+      var back; try { back = storage.getItem(KEY); } catch (e) { back = null; }
+      return back === raw;
+    }
+    function viewMsg() {
+      return { RO: MSG.ro, NOLOCK: MSG.nolock, LOCKFAIL: MSG.lockfail, READFAIL: MSG.readfail, BADFILE: MSG.badfile, MIGRATEFAIL: MSG.migratefail }[S.mode] || "";
+    }
+    function view() {
+      return { mode: S.mode, writer: S.writer, ready: S.ready, dirty: S.dirty, busy: !!S.busy, gen: S.gen, msg: viewMsg(),
+        st: copy(S.st), sess: S.sess ? copy(S.sess) : null };
+    }
+    return {
+      boot: boot, view: view, token: token, startToday: startToday, startExam: startExam, answer: answer, next: next, home: home,
+      setHidden: setHiddenOp, setSound: setSound, reset: reset, retrySave: retrySave, reread: reread,
+      askTakeover: askTakeover, message: message, yieldLock: yieldLock, refreshView: refreshView, canReplace: canReplace, accept: accept,
+      mode: function () { return S.mode; }
+    };
+  }
+
   var api = {
     SUBJECTS: SUBJECTS, TYPES: TYPES, MASTER: MASTER, GAP: GAP, KEEP: KEEP, LOG_MAX: LOG_MAX,
     dayKey: dayKey, addDays: addDays, isDay: isDay, itemProblems: itemProblems, norm: norm, isRight: isRight, answerText: answerText,
-    blank: blank, clean: clean, visible: visible, isHidden: isHidden, setHidden: setHidden, resetProgress: resetProgress, merge: merge, record: record, dueList: dueList, examList: examList, stats: stats, status: status
+    KEY: KEY, LOCK: LOCK, V: V, MSG: MSG, RETRY_MS: RETRY_MS,
+    blank: blank, decode: decode, visible: visible, isHidden: isHidden, setHidden: setHidden, resetProgress: resetProgress, record: record, createController: createController, dueList: dueList, examList: examList, stats: stats, status: status
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.G5WrongCore = api;
 })(typeof window !== "undefined" ? window : this);
@@ -430,7 +634,7 @@ details[open]>summary{margin-bottom:12px}
 <script>
 (function(){
 "use strict";
-var C = window.G5WrongCore, KEY = "g5wrong.v1", EXAM = "2026-11-05";
+var C = window.G5WrongCore, KEY = C.KEY, EXAM = "2026-11-05";
 // e2e 測試用：測試在頁面載入前放 window.G5WrongTestItems，正式網頁不會有這個變數
 var RAW = Array.isArray(window.G5WrongTestItems) ? window.G5WrongTestItems : window.G5WrongBank.ITEMS;
 var $ = function(s){ return document.querySelector(s); };
@@ -439,67 +643,51 @@ var badItems = [], ITEMS = RAW.filter(function(it){ var p = C.itemProblems(it); 
 var ids = {}; ITEMS = ITEMS.filter(function(it){ if (ids[it.id]) { badItems.push(it.id + "：id 重複"); return false; } ids[it.id] = 1; return true; });
 function today(){ return C.dayKey(Date.now()); }
 
-// 存檔：讀不到或寫不進去要講出來（不默默弄丟她的進度）
-var canStore = true, st;
-function load(){ try { st = C.clean(JSON.parse(localStorage.getItem(KEY) || "null")); } catch (e) { canStore = false; st = C.blank(); } }
-// 存檔＝在同一個同步步驟裡「讀存檔→和記憶體逐題合併→寫回」（C.merge，見 src/core.js 資料模型說明）。
-// 寫成功才採用合併結果；寫不進去記憶體原封不動（Codex 審 cf61e0ff：原本重讀會把還沒存進去的進度蓋掉）。
-function stored(){ try { return C.clean(JSON.parse(localStorage.getItem(KEY) || "null")); } catch (e) { return null; } }
-function save(){
-  var base = stored(), merged = base ? C.merge(base, st) : st;
-  try { localStorage.setItem(KEY, JSON.stringify(merged)); st = merged; canStore = true; return true; }
-  catch (e) { canStore = false; banner(); return false; }
-}
-function banner(){
-  var h = "";
-  if (!canStore) h += '<div class="banner">這台裝置現在存不了進度（可能是私密瀏覽或空間滿了），今天練的關掉頁面就會不見。</div>';
-  if (badItems.length) h += '<div class="banner">有 ' + badItems.length + ' 題資料有問題先不出：' + esc(badItems.join("；")) + '</div>';
-  $("#banners").innerHTML = h;
-}
-// 看別的分頁改了什麼：合併進記憶體，不是整份取代（Codex 審 151f6f09／cf61e0ff）
-function fresh(){ var base = stored(); if (base) st = C.merge(base, st); }
-load();
-window.addEventListener("storage", function(e){
-  if (e.key !== KEY) return;
-  fresh();
-  // 練習中：別頁把目前這題設成不用再練，這頁要馬上跳過（Codex 審 cf61e0ff：原本照樣出題、照樣記錄）
-  if (!sess || (!sess.answered && C.isHidden(st, sess.queue[sess.i]))) render();
+// 存檔（Codex 設計者方案 b，docs/storage-design-b-codex-designer-20261013.md；邏輯全在 src/core.js 的 createController）：
+// 同一時間只有一個分頁能練習與寫入（Web Locks「g5wrong.v1:writer」）；其他分頁唯讀，按任何會改紀錄的按鈕都只說「另一個分頁正在練習，請回那一頁」。
+// 主頁記憶體是唯一工作狀態，存檔＝整份寫進去；存不進去就留在記憶體、警告＋自動與手動重試。這頁只負責畫面。
+var chan = null; try { chan = new BroadcastChannel(C.LOCK); } catch (e) {}
+var store = null; try { store = window.localStorage; } catch (e) {}
+var subs = [], FLASH = "";
+var ctl = C.createController({
+  storage: store, locks: (navigator.locks && typeof navigator.locks.request === "function") ? navigator.locks : null, items: ITEMS,
+  now: function(){ return Date.now(); }, setTimeout: function(f, ms){ return setTimeout(f, ms); }, clearTimeout: function(i){ clearTimeout(i); },
+  post: function(m){ if (chan) try { chan.postMessage(m); } catch (e) {} },
+  onChange: function(){ render(); subs.forEach(function(f){ try { f(); } catch (e) {} }); }
 });
+if (chan) chan.onmessage = function(e){ ctl.message(e.data); };
+// 唯讀分頁：別頁存了就更新畫面上的數字（只顯示；接手時一定重讀，不沿用這份）
+window.addEventListener("storage", function(e){ if (e.key === KEY || e.key === null) ctl.refreshView(); });
+// 回到這個分頁（例如從別的分頁切回來）：請正在寫的那頁讓出；那頁在首頁且已存好才會讓
+document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "visible") ctl.askTakeover(); });
+
+function refuse(r){ if (r && r.msg) { FLASH = r.msg; banner(ctl.view()); } }
 
 var actx = null;
 function chime(i){
-  if (!st.settings.sound && i === undefined) return;
-  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); window.G5Tones.play(actx, i !== undefined ? i : st.settings.tone); } catch (e) {}
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); window.G5Tones.play(actx, i); } catch (e) {}
 }
 
-// 一次複習：queue＝要出的題，requeued＝答錯後在最後再出一次的（每題只補一次）
-var sess = null;
-function start(list, label){
-  if (!list.length) return;
-  sess = { label: label, queue: list.map(function(it){ return it.id; }), i: 0, right: 0, wrong: 0, requeued: {}, answered: false, last: null, mastered: 0 };
-  render(); $("#main").scrollIntoView({block: "start"});
+function banner(v){
+  var h = "";
+  if (v.mode === "RO") h += '<div class="banner" id="roBanner">' + esc(v.msg) + (v.busy ? "那一頁正在練習或還沒存好，請在那一頁練完、回首頁後再按一次。" : "") +
+    ' <button class="btn ghost sm" type="button" id="takeBtn">改在這一頁練習</button></div>';
+  else if (v.mode === "NOLOCK" || v.mode === "LOCKFAIL") h += '<div class="banner">' + esc(v.msg) + '</div>';
+  if (v.dirty) h += '<div class="banner" id="saveWarn" role="alert">還沒存好，請先不要關閉這頁（可能是私密瀏覽或空間滿了，會自動再試）。 <button class="btn ghost sm" type="button" id="saveRetry">現在再存一次</button></div>';
+  if (FLASH && v.mode !== "READY") h += '<div class="banner" id="actMsg" role="alert">' + esc(FLASH) + '</div>';
+  if (badItems.length) h += '<div class="banner">有 ' + badItems.length + ' 題資料有問題先不出：' + esc(badItems.join("；")) + '</div>';
+  $("#banners").innerHTML = h;
+  var tb = $("#takeBtn"); if (tb) tb.onclick = function(){ ctl.askTakeover(); FLASH = ""; tb.disabled = true; tb.textContent = "已請那一頁讓出…"; };
+  var sr = $("#saveRetry"); if (sr) sr.onclick = function(){ ctl.retrySave(); };
 }
-function byId(id){ for (var i = 0; i < ITEMS.length; i++) if (ITEMS[i].id === id) return ITEMS[i]; return null; }
-function answer(val){
-  if (!sess || sess.answered) return;
-  fresh();
-  if (C.isHidden(st, sess.queue[sess.i])) { render(); return; }   // 這題剛被設成不用再練：不記錄，render 會跳到下一題
-  var it = byId(sess.queue[sess.i]), ok = C.isRight(it, val), wasM = !!(st.it[it.id] || {}).m;
-  var r = C.record(st, it.id, ok, today(), Date.now()); st = r.state; save();
-  sess.answered = true; sess.last = { val: val, ok: ok, counted: r.counted };
-  if (ok) { sess.right++; chime(); if (!wasM && st.it[it.id].m) sess.mastered++; }
-  else { sess.wrong++; if (!sess.requeued[it.id]) { sess.requeued[it.id] = 1; sess.queue.push(it.id); } }
-  render();
-}
-function next(){ sess.i++; sess.answered = false; sess.last = null; render(); var b = document.querySelector("#main .opt, #main input, #main .btn"); if (b) b.focus(); }
 
-function VIS(){ return C.visible(ITEMS, st); }
-function renderHome(){
-  var V = VIS();
+function VIS(st){ return C.visible(ITEMS, st); }
+function renderHome(st){
+  var V = VIS(st);
   if (ITEMS.length && !V.length) return '<div class="empty"><span class="sect-t">錯題都設成「不用再練」了</span><p style="margin:0">共 ' + ITEMS.length + ' 題，可以在下面「全部錯題清單」恢復。</p></div>';
-  return homeFor(V);
+  return homeFor(V, st);
 }
-function homeFor(ITEMS){   // 參數 ITEMS＝沒被隱藏的題（刻意與外層同名：下面的首頁只看得到這些）
+function homeFor(ITEMS, st){   // 參數 ITEMS＝沒被隱藏的題（刻意與外層同名：下面的首頁只看得到這些）
   var t = today(), due = C.dueList(ITEMS, st, t), S = C.stats(ITEMS, st, t), m = 0;
   Object.keys(S).forEach(function(k){ m += S[k].mastered; });
   if (!ITEMS.length) {
@@ -515,7 +703,8 @@ function homeFor(ITEMS){   // 參數 ITEMS＝沒被隱藏的題（刻意與外�
     '<button class="sub all" type="button" data-sub=""><b>全部科目</b><span>' + ITEMS.length + ' 題・學會 ' + m + ' 題</span></button>' +
     subs.map(function(s){ return '<button class="sub" type="button" data-sub="' + esc(s) + '"><b>' + esc(s) + '</b><span>' + S[s].total + ' 題・學會 ' + S[s].mastered + ' 題</span></button>'; }).join("") + '</div>';
 }
-function renderQuestion(){
+function byId(id){ for (var i = 0; i < ITEMS.length; i++) if (ITEMS[i].id === id) return ITEMS[i]; return null; }
+function renderQuestion(sess){
   var it = byId(sess.queue[sess.i]), n = sess.queue.length, L = sess.last, h = "";
   h += '<div class="qhead"><span>' + esc(sess.label) + '・第 ' + (sess.i + 1) + ' / ' + n + ' 題</span><button class="btn ghost sm" id="quit" type="button">回首頁</button></div>';
   h += '<div class="bar"><i style="width:' + Math.round(sess.i / n * 100) + '%"></i></div>';
@@ -541,13 +730,13 @@ function renderQuestion(){
   }
   return h;
 }
-function renderDone(){
+function renderDone(sess){
   return '<div class="done"><b class="t">練完了！</b><span>' + esc(sess.label) + '：答對 ' + sess.right + ' 次、答錯 ' + sess.wrong + ' 次' + (sess.mastered ? '，新學會 ' + sess.mastered + ' 題' : "") + '。</span>' +
     '<span class="small muted">答錯的題目明天會再出；連續三天都答對就算學會。</span><button class="btn" id="homeBtn" type="button">回首頁</button></div>';
 }
-function renderList(){
+function renderList(st){
   if (!ITEMS.length) return '<span class="muted">還沒有錯題。</span>';
-  var t = today(), V = VIS(), H = ITEMS.filter(function(it){ return C.isHidden(st, it.id); });
+  var t = today(), V = VIS(st), H = ITEMS.filter(function(it){ return C.isHidden(st, it.id); });
   var short = function(it){ return esc(it.q.length > 40 ? it.q.slice(0, 40) + "…" : it.q); };
   var h = C.SUBJECTS.filter(function(s){ return V.some(function(it){ return it.subject === s; }); }).map(function(s){
     return '<div style="display:grid;gap:6px"><h3>' + esc(s) + '</h3>' + V.filter(function(it){ return it.subject === s; }).map(function(it){
@@ -562,51 +751,67 @@ function renderList(){
   return h || '<span class="muted">錯題都設成不用再練了。</span>';
 }
 function render(){
+  var v = ctl.view(), st = v.st, sess = v.writer ? v.sess : null, tok = ctl.token();
   var d = Math.round((Date.parse(EXAM + "T00:00:00+08:00") - Date.parse(today() + "T00:00:00+08:00")) / 86400000);
   $("#days").textContent = d >= 0 ? d : "–";
-  banner();
-  // 練習中被設成「不用再練」的題直接跳過（Codex 審 151f6f09：原本照樣出題、照樣記錄）；正在看解說的那題不跳，等按下一題
-  if (sess) { var cur = sess.queue[sess.i]; if (!(sess.answered && cur)) while (sess.i < sess.queue.length && C.isHidden(st, sess.queue[sess.i])) sess.i++; }
+  if (v.mode === "READY") FLASH = "";
+  banner(v);
   var main = $("#main");
-  if (!sess) main.innerHTML = renderHome();
-  else if (sess.i >= sess.queue.length) main.innerHTML = renderDone();
-  else main.innerHTML = renderQuestion();
+  if (v.mode === "BOOT") main.innerHTML = '<div class="empty"><span class="muted">讀取練習紀錄中…</span></div>';
+  else if (v.writer && !v.ready) main.innerHTML = '<div class="empty"><span class="sect-t">' + esc(v.msg) + '</span>' +
+    (v.mode === "BADFILE" ? "" : '<div class="row"><button class="btn" type="button" id="rereadBtn">再讀一次</button></div>') + '</div>';
+  else if (!sess) main.innerHTML = renderHome(st);
+  else if (sess.i >= sess.queue.length) main.innerHTML = renderDone(sess);
+  else main.innerHTML = renderQuestion(sess);
   var hb0 = $("#hiddenBox"), keepOpen = !!(hb0 && hb0.open);   // 重繪前先記住「已隱藏」清單有沒有展開
-  $("#list").innerHTML = renderList();
-  $("#storeMsg").textContent = canStore ? "進度存在這台裝置（開啟跨裝置同步後也會存到家裡的雲端）。" : "這台裝置存不了進度。";
-  var go = $("#goToday"); if (go) go.onclick = function(){ start(C.dueList(VIS(), st, today()), "今天的複習"); };
-  main.querySelectorAll(".sub").forEach(function(b){ b.onclick = function(){ var s = b.getAttribute("data-sub"); start(C.examList(VIS(), st, s), (s || "全部科目") + "考前總複習"); }; });
+  $("#list").innerHTML = renderList(st);
+  $("#storeMsg").textContent = v.mode !== "READY" ? v.msg : v.dirty ? "進度還沒存好，會自動再試。" : "進度存在這台裝置（開啟跨裝置同步後也會存到家裡的雲端）。";
+  $("#snd").value = st.settings.sound ? String(st.settings.tone) : "off";
+  var rr = $("#rereadBtn"); if (rr) rr.onclick = function(){ refuse(ctl.reread()); };
+  var go = $("#goToday"); if (go) go.onclick = function(){ refuse(ctl.startToday(tok)); var m = $("#main"); if (m && m.scrollIntoView) m.scrollIntoView({block: "start"}); };
+  main.querySelectorAll(".sub").forEach(function(b){ b.onclick = function(){ refuse(ctl.startExam(tok, b.getAttribute("data-sub"))); var m = $("#main"); if (m && m.scrollIntoView) m.scrollIntoView({block: "start"}); }; });
   $("#list").querySelectorAll("[data-hide],[data-unhide]").forEach(function(b){ b.onclick = function(){
-    var id = b.getAttribute("data-hide") || b.getAttribute("data-unhide");
-    fresh(); st = C.setHidden(st, id, b.hasAttribute("data-hide"), Date.now()); save(); render();
+    refuse(ctl.setHidden(tok, b.getAttribute("data-hide") || b.getAttribute("data-unhide"), b.hasAttribute("data-hide")));
   }; });
   if (keepOpen && $("#hiddenBox")) $("#hiddenBox").open = true;
   var rs = $("#resetBtn"), rc = $("#resetSure");
   rs.onclick = function(){ rc.hidden = false; rs.hidden = true; $("#resetMsg").textContent = "真的要清除嗎？她練過的天數與學會的題目都會歸零（題目本身不會刪）。"; };
   $("#resetNo").onclick = function(){ rc.hidden = true; rs.hidden = false; $("#resetMsg").textContent = ""; };
   $("#resetYes").onclick = function(){
-    // 存不進去就退回原狀並照實說（Codex 審 151f6f09：原本存檔失敗仍宣告已清除，重新整理舊紀錄又回來）
-    fresh(); var old = st; st = C.resetProgress(st, Date.now());
-    var ok = save(); if (ok) sess = null; else st = old;
-    rc.hidden = true; rs.hidden = false; render();
-    $("#resetMsg").textContent = ok ? "已清除全部作答紀錄。" : "沒有清除成功：這台裝置現在存不了資料，紀錄維持原樣。";
+    // 候選狀態寫成功才採用（Codex 設計者契約 5）；失敗或唯讀：什麼都不變、照實說
+    var r = ctl.reset(ctl.token());
+    rc.hidden = true; rs.hidden = false;
+    $("#resetMsg").textContent = r.msg || "";
+  };
+  $("#snd").onchange = function(e){
+    var val = e.target.value, cur = ctl.view().st.settings;
+    var r = ctl.setSound(ctl.token(), val !== "off", val === "off" ? cur.tone : +val);
+    if (!r.ok) { refuse(r); e.target.value = cur.sound ? String(cur.tone) : "off"; return; }
+    if (val !== "off") chime(+val);
   };
   if (sess && sess.i < sess.queue.length) {
     var it = byId(sess.queue[sess.i]);
-    main.querySelectorAll(".opt").forEach(function(b){ b.onclick = function(){ var k = +b.getAttribute("data-k"); answer(it.type === "tf" ? k === 0 : k); }; });
+    // 這一題的作答 handler 綁定這次畫面的 token（世代＋題目）：換題、隱藏、清除、讓出後，舊 handler 一律無效
+    var send = function(val){ var r = ctl.answer(tok, val); if (!r.ok) return refuse(r); if (r.chime) chime(ctl.view().st.settings.tone); };
+    main.querySelectorAll(".opt").forEach(function(b){ b.onclick = function(){ var k = +b.getAttribute("data-k"); send(it.type === "tf" ? k === 0 : k); }; });
     var fi = $("#fillIn"), fg = $("#fillGo");
-    if (fg) { fg.onclick = function(){ if (fi.value.trim()) answer(fi.value); else fi.focus(); }; fi.onkeydown = function(e){ if (e.key === "Enter") fg.onclick(); }; }
-    $("#quit").onclick = function(){ sess = null; render(); };
-    var nb = $("#nextBtn"); if (nb) nb.onclick = next;
+    if (fg) { fg.onclick = function(){ if (fi.value.trim()) send(fi.value); else fi.focus(); }; fi.onkeydown = function(e){ if (e.key === "Enter") fg.onclick(); }; }
+    $("#quit").onclick = function(){ refuse(ctl.home(tok)); };
+    var nb = $("#nextBtn"); if (nb) nb.onclick = function(){ refuse(ctl.next(tok)); var b = document.querySelector("#main .opt, #main input, #main .btn"); if (b) b.focus(); };
   }
-  var hb = $("#homeBtn"); if (hb) hb.onclick = function(){ sess = null; render(); };
+  var hbt = $("#homeBtn"); if (hbt) hbt.onclick = function(){ refuse(ctl.home(tok)); };
 }
 $("#snd").innerHTML = '<option value="off">關閉</option>' + window.G5Tones.TONES.map(function(t, i){ return '<option value="' + i + '">' + (i + 1) + '. ' + esc(t.name) + '</option>'; }).join("");
-$("#snd").value = st.settings.sound ? String(st.settings.tone) : "off";
-$("#snd").onchange = function(e){ var v = e.target.value; if (v === "off") st.settings.sound = false; else { st.settings.sound = true; st.settings.tone = +v; chime(+v); } save(); };
 $("#sndTry").onclick = function(){ var v = $("#snd").value; chime(v === "off" ? 0 : +v); };
 render();
-window.G5WrongApp = { state: function(){ return JSON.parse(JSON.stringify(st)); }, items: function(){ return ITEMS.map(function(it){ return it.id; }); } };
+ctl.boot();
+window.G5WrongApp = {
+  state: function(){ return ctl.view().st; }, items: function(){ return ITEMS.map(function(it){ return it.id; }); },
+  mode: function(){ return ctl.mode(); }, dirty: function(){ return ctl.view().dirty; },
+  writerReady: function(){ var v = ctl.view(); return v.writer && v.ready; },
+  canReplace: function(key){ return ctl.canReplace(key); }, accept: function(key, data){ return ctl.accept(key, data); },
+  subscribe: function(f){ subs.push(f); }
+};
 })();
 </script>
 <script>
@@ -669,20 +874,31 @@ window.G5WrongApp = { state: function(){ return JSON.parse(JSON.stringify(st)); 
 <script src="https://windsorya.github.io/g5-help/qrcode.js"></script>
 <script src="https://windsorya.github.io/g5-help/sync.js"></script>
 <script>
-// 跨裝置同步：只同步本站自己的 g5wrong.v1；同步程式與其他站共用 g5-help/sync.js，載不到或還沒開放這個 key 就照常本機使用。
+// 跨裝置同步：只同步本站自己的 g5wrong.v1；同步程式與其他站共用 g5-help/sync.js（canReplace／accept：頁面是唯一寫入者，與難題站同一接法）。
+// 只有正在寫入的那一頁啟動同步；雲端版本只能經由本頁、在首頁且沒有未存進度、本頁還沒有自己的修改時換上（G5WrongApp.accept），sync.js 不直接寫這個 key。
 (function(){
-  var box = document.getElementById("g5sync");
-  function off(){ if (box) box.innerHTML = '<p class="small muted" style="margin:0">錯題站的跨裝置同步還沒開放，練習紀錄先存在這台裝置。</p>'; }
-  if (!window.G5Sync) return off();
-  var queued = false;
-  try {
-    window.G5Sync.init({
-      endpoint: "https://script.google.com/macros/s/AKfycbxwo08VVT5tSRf-DsQEoo1hMlCm1YytGTzj89BPtJ6YWjPieuKyAPbnWXjUKagBdL6l/exec",
-      keys: ["g5wrong.v1"], container: "#g5sync",
-      summarize: {"g5wrong.v1": function(j){ try { var x = JSON.parse(j), it = x.it || {}, ks = Object.keys(it); return "練過 " + ks.length + " 題、學會 " + ks.filter(function(k){ return it[k] && it[k].m; }).length + " 題"; } catch (e) { return "（讀不懂的紀錄）"; } }},
-      onReplaced: function(){ if (!queued) { queued = true; setTimeout(function(){ location.reload(); }, 0); } }
-    });
-  } catch (e) { off(); }
+  var box = document.getElementById("g5sync"), A = window.G5WrongApp, api = null;
+  function note(t){ if (box) box.innerHTML = '<p class="small muted" style="margin:0">' + t + '</p>'; }
+  if (!window.G5Sync || !A) return note("跨裝置同步現在載不到，練習紀錄先存在這台裝置。");
+  function up(){
+    if (api) return;
+    try {
+      api = window.G5Sync.init({
+        endpoint: "https://script.google.com/macros/s/AKfycbxwo08VVT5tSRf-DsQEoo1hMlCm1YytGTzj89BPtJ6YWjPieuKyAPbnWXjUKagBdL6l/exec",
+        keys: ["g5wrong.v1"], container: "#g5sync",
+        summarize: {"g5wrong.v1": function(j){ try { var x = JSON.parse(j), it = x.it || {}, ks = Object.keys(it); return "練過 " + ks.length + " 題、學會 " + ks.filter(function(k){ return it[k] && it[k].m; }).length + " 題"; } catch (e) { return "（讀不懂的紀錄）"; } }},
+        canReplace: function(key){ return A.canReplace(key); },
+        accept: function(key, data){ return A.accept(key, data); }
+      });
+    } catch (e) { api = null; note("跨裝置同步暫停，進度先存在這台裝置。"); }
+  }
+  function down(){ if (api) { try { api.destroy(); } catch (e) {} api = null; } }
+  function sync(){
+    if (A.writerReady()) return up();
+    down();
+    note(A.mode() === "RO" ? "這個網站在另一個分頁開著，同步由那一頁負責。" : "跨裝置同步暫停，進度先存在這台裝置。");
+  }
+  A.subscribe(sync); sync();
 })();
 </script>
 </body></html>
