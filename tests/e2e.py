@@ -94,14 +94,22 @@ def serve(route):
     route.fulfill(status=200, content_type=ct, body=f.read_bytes())
 
 
-def new_ctx(browser, device=None, items=None, seed=None, code=None, flags=""):
-    """seed：放進 g5wrong.v1 的原始字串（整個 context 只放一次，重新整理與第二頁都讀到頁面自己存的）。flags：額外的 init JS。"""
+SYNC_URL = "https://windsorya.github.io/g5-help/sync.js"
+
+
+def new_ctx(browser, device=None, items=None, seed=None, code=None, flags="", sync=None):
+    """seed：放進 g5wrong.v1 的原始字串（整個 context 只放一次，重新整理與第二頁都讀到頁面自己存的）。flags：額外的 init JS。
+    sync：None＝同步替身（SYNC_STUB）；檔案路徑＝把那份真的 sync.js 掛在正式網址上；"live"＝不攔、載正式網址那份。"""
     ctx = browser.new_context(**(device or {}))
     ctx.route("https://g5wrong.test/**", serve)
     ctx.route("https://fonts.googleapis.com/**", lambda r: r.abort())
     ctx.route("https://fonts.gstatic.com/**", lambda r: r.abort())
     ctx.route("https://windsorya.github.io/g5-help/qrcode.js", lambda r: r.fulfill(status=200, content_type="application/javascript", body=""))
-    ctx.route("https://windsorya.github.io/g5-help/sync.js", lambda r: r.fulfill(status=200, content_type="application/javascript", body=SYNC_STUB))
+    if sync is None:
+        ctx.route(SYNC_URL, lambda r: r.fulfill(status=200, content_type="application/javascript", body=SYNC_STUB))
+    elif sync != "live":
+        js = Path(sync).read_bytes()
+        ctx.route(SYNC_URL, lambda r: r.fulfill(status=200, content_type="application/javascript", body=js))
     ctx.route(GAS, lambda r: r.abort())
     init = INIT + flags
     if items is not None:
@@ -790,10 +798,16 @@ def m22(br, L):
 
 
 def m23(br, L):
-    for raw in ["{壞掉", "[1,2]", '{"v":2,"it":[]}', '{"v":1,"it":"x"}', '{"v":9,"it":{}}']:
+    # 後兩個：Codex 審 1ed44f8 F4——單題紀錄不是一般物件（v1、v2 各一），舊版會略過它、改設定時把原文覆寫掉
+    bad_rec = [json.dumps({"v": v, "it": {A_["id"]: []}, "hidden": {}, "settings": {"sound": False, "tone": 4}}) for v in (2, 1)]
+    for raw in ["{壞掉", "[1,2]", '{"v":2,"it":[]}', '{"v":1,"it":"x"}', '{"v":9,"it":{}}'] + bad_rec:
         ctx = new_ctx(br, items=ITEMS, seed=raw)
         pg = page_in(ctx, ready=False)
         try_answer(pg, A_)
+        try:
+            open_details(pg, "#setBox"); pg.select_option("#snd", "2")
+        except Exception:
+            pass
         try:
             do_reset(pg)
         except Exception:
@@ -930,6 +944,60 @@ def mc6(br, L):
     ctx.close()
 
 
+def mf2(br, L):
+    """F2（Codex 審 1ed44f8）：舊畫面的「確定清除」handler 不得清掉之後才存好的新答案（契約 6）。"""
+    ctx, pg = one(br)
+    pg.evaluate("() => { window.__oldReset = document.querySelector('#resetYes').onclick; }")
+    try_answer(pg, A_)
+    pre = DIT(pg)
+    pg.evaluate("() => { try { window.__oldReset && window.__oldReset(); } catch (e) { window.__oldErr = String(e); } }")
+    pg.wait_for_timeout(100)
+    msg = pg.locator("#resetMsg").text_content() or ""
+    check(f"{L} F2[D] 保存舊「確定清除」handler、答 a 存妥後呼叫它 ⇒ 被拒，D 與記憶體仍有 a", A_["id"] in pre and A_["id"] in DIT(pg) and A_["id"] in MST(pg)["it"], (pre, DIT(pg)))
+    check(f"{L} F2[UI] 不得顯示清除成功", "已清除" not in msg, msg)
+    ctx.close()
+
+
+def mf3(br, L):
+    """F3（Codex 審 1ed44f8）：寫入失敗的自動重試會重繪；正在輸入的填充答案（值、焦點、游標）不能被清掉。"""
+    ctx, pg = one(br)
+    pg.evaluate("window.__failSet = true")
+    pg.locator('#main .sub[data-sub=""]').click()          # 全部科目：a（選擇）→ b（填充）→ c（是非）
+    answer(pg, True)                                         # a：答案接受、寫入失敗、排重試計時器
+    pg.locator("#nextBtn").click()
+    check(f"{L} F3[前提] 下一題是填充題 b", cur_item(pg)["id"] == B_["id"], cur_item(pg)["id"])
+    pg.locator("#fillIn").click()
+    pg.keyboard.type("磨刀")                                  # 答案輸入到一半，還沒送出
+    pg.evaluate("() => { const el = document.querySelector('#fillIn'); el.__mark = 1; el.setSelectionRange(1, 1); }")
+    probe = "() => { const el = document.querySelector('#fillIn'); return el ? {v: el.value, same: el.__mark === 1, focus: document.activeElement === el, pos: el.selectionStart} : null; }"
+    pg.wait_for_timeout(3600)                                # 重試計時器觸發一次：仍失敗 → 重繪
+    st1 = pg.evaluate(probe)
+    check(f"{L} F3[UI] 重試（仍失敗）重繪後：輸入值、焦點、游標都不變", st1 == {"v": "磨刀", "same": True, "focus": True, "pos": 1}, st1)
+    pg.evaluate("window.__failSet = false")
+    pg.wait_for_timeout(3600)                                # 重試成功 → 重繪、警告消失
+    st2 = pg.evaluate(probe)
+    check(f"{L} F3[UI] 重試成功、警告消失後：輸入值仍在", st2 is not None and st2["v"] == "磨刀" and st2["same"] and "還沒存好" not in banners(pg), (st2, banners(pg)))
+    pg.locator("#fillIn").press("Enter")
+    pg.wait_for_timeout(150)
+    it = DIT(pg)
+    check(f"{L} F3[D] 送出後 D 有 a、b 各一次（b 用的是輸入中的答案）", it.get(A_["id"], {}).get("n") == 1 and it.get(B_["id"], {}).get("n") == 1 and it.get(B_["id"], {}).get("ok") == 1, it)
+    ctx.close()
+
+
+def mf3b(br, L):
+    """F3 延伸：同一題還沒送出時，畫面因別的操作換世代重建（例如爸媽在清單藏了另一題），輸入中的答案要搬到新的輸入框。"""
+    ctx, pg = one(br)
+    pg.locator('#main .sub[data-sub=""]').click()
+    answer(pg, True); pg.locator("#nextBtn").click()          # a 答完，來到填充題 b
+    pg.locator("#fillIn").click(); pg.keyboard.type("磨刀")
+    hide(pg, C_["id"])                                         # 藏 c：世代改變、#main 重建，b 仍是目前這一題
+    v = pg.evaluate("() => { const el = document.querySelector('#fillIn'); return el ? el.value : null; }")
+    check(f"{L} F3b[UI] 同一題重建後，輸入中的答案搬到新的輸入框", v == "磨刀" and cur_item(pg)["id"] == B_["id"], v)
+    pg.locator("#fillIn").press("Enter"); pg.wait_for_timeout(150)
+    check(f"{L} F3b[D] 送出後 b 記一次答對、c 已隱藏", DIT(pg).get(B_["id"], {}).get("ok") == 1 and hidden_on(D(pg), C_["id"]), D(pg))
+    ctx.close()
+
+
 CLOUD = v2({A_["id"]: ent(n=5, ok=5)}, {C_["id"]: True}, {"sound": False, "tone": 2})
 
 
@@ -992,7 +1060,7 @@ def m34(br, L):
 
 
 MATRIX = [m01_02, m03, m04, m05, m06, m07, m08, m09, lambda b, L: m12_13(b, L, False), lambda b, L: m12_13(b, L, True), m14, m15, m16,
-          m17, m18, m19, m20, m21, m22, m23, m24, m25, m26, m27, m28, m29, m30, m31, m32, m33, m34, mc6]
+          m17, m18, m19, m20, m21, m22, m23, m24, m25, m26, m27, m28, m29, m30, m31, m32, m33, m34, mc6, mf2, mf3, mf3b]
 
 
 def run_matrix(br, L):

@@ -318,6 +318,19 @@ test("23／壞格式與未知版本：各 fixture 阻擋寫入、原文不變、
   }
 });
 
+test("23b／F4（Codex 審 1ed44f8）壞的單題紀錄 it.a=[]（v1、v2 各一）：BADFILE、改設定與作答都被拒、原文逐字不變", async () => {
+  for (const v of [1, 2]) {
+    const raw = JSON.stringify({ v, it: { a: [] }, hidden: {}, settings: { sound: false, tone: 4 } });
+    const w = world(raw); const A = tab(w); await flush();
+    assert.equal(A.view().mode, "BADFILE", raw); assert.match(A.view().msg, /讀不懂/, raw);
+    assert.equal(A.setSound(A.token(), true, 2).ok, false, raw);
+    assert.equal(A.startExam(A.token(), "數學").ok, false, raw);
+    assert.equal(A.setHidden(A.token(), "b", true).ok, false, raw);
+    assert.equal(A.reset(A.token()).ok, false, raw);
+    assert.equal(w.store.raw(), raw, raw); assert.equal(w.store.sets, 0, raw);
+  }
+});
+
 test("24／真正沒有存檔：可開始、答題前不寫空白 key；首次答案後 D.it.a.n=1", async () => {
   const w = world(); const A = tab(w); await flush();
   assert.equal(A.view().mode, "READY"); assert.equal(w.store.raw(), null); assert.equal(w.store.sets, 0);
@@ -392,6 +405,17 @@ test("31／重試及重複事件：答案接受後寫失敗、重播同題 handl
   assert.equal(M(A).it.a.n, 1); assert.equal(w.clock.pending(), 1);   // 單一重試計時器
   w.store.failSet = false; w.clock.tick(3000); await flush();
   assert.equal(w.store.D().it.a.n, 1); assert.equal(A.view().dirty, false); assert.equal(w.clock.pending(), 0);
+});
+
+test("31c／重試計時器存檔不換世代：畫面據此保留輸入中的答案（F3 的核心前提）", async () => {
+  const w = world(); const A = tab(w); await flush();
+  w.store.failSet = true;
+  A.startExam(A.token(), ""); A.answer(A.token(), 0); A.next(A.token());
+  const tok = A.token(); assert.equal(tok.qid, "b");
+  w.clock.tick(3000); await flush(); assert.deepEqual(A.token(), tok);   // 重試仍失敗
+  w.store.failSet = false; w.clock.tick(3000); await flush();
+  assert.deepEqual(A.token(), tok); assert.equal(A.view().dirty, false);   // 重試成功
+  assert.ok(A.answer(tok, 0).ok);                                         // 原本那一題的 handler 仍可正常作答
 });
 
 test("31b／重試計時器失敗時只保留一個、寫的是當下完整 state（不重播答案）", async () => {

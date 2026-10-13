@@ -111,7 +111,7 @@ test("讀進來的紀錄：壞掉的欄位丟掉，不弄壞整頁（v1 遷移�
   [1, 2].forEach((v) => {
     const d = C.decode(JSON.stringify({ v, settings: { sound: false, tone: 99 }, it: {
       ok1: { n: 3, ok: 2, bad: 1, s: 9, m: true, last: "2026-10-13", due: "2026-10-20", log: [["2026-10-13", 1], ["壞", 1], ["2026-10-12", 5]] },
-      "壞 id": { n: 1 }, nul: null, neg: { n: -1, ok: "3", due: "明天" },
+      neg: { n: -1, ok: "3", due: "明天" },
     } }));
     assert.equal(d.ok, true); const c = d.st;
     assert.deepEqual(Object.keys(c.it).sort(), ["neg", "ok1"]);
@@ -160,12 +160,32 @@ test("清除全部作答紀錄：進度歸零，保留提示音設定與隱藏�
   assert.equal(Object.keys(st.it).length, 1);   // 不改舊的
 });
 
-test("讀進來的隱藏名單：v1 的 true／正數＝隱藏、負數＝已恢復；v2 只收合法 id 且值為 true", () => {
-  const c = C.decode(JSON.stringify({ v: 1, it: {}, hidden: { ok: true, ts: 1760000000000, back: -5, zero: 0, str: "1", "壞 id": true } })).st;
+test("讀進來的隱藏名單：v1 的 true／正數＝隱藏、負數＝已恢復；v2 只認 true", () => {
+  const c = C.decode(JSON.stringify({ v: 1, it: {}, hidden: { ok: true, ts: 1760000000000, back: -5 } })).st;
   assert.deepEqual(c.hidden, { ok: true, ts: true });
   assert.ok(C.isHidden(c, "ok") && C.isHidden(c, "ts") && !C.isHidden(c, "back"));
   assert.equal(C.decode(JSON.stringify({ v: 1, it: {}, hidden: "x" })).ok, false);   // 容器型別不對＝讀不懂，不當空白
-  assert.deepEqual(C.decode(JSON.stringify({ v: 2, it: {}, hidden: { a: true, b: 1, c: "true" } })).st.hidden, { a: true });
+  assert.deepEqual(C.decode(JSON.stringify({ v: 2, it: {}, hidden: { a: true } })).st.hidden, { a: true });
+});
+
+// Codex 審 1ed44f8 F4：任何一筆讀不懂的紀錄都不能默默略過（略過後下一次存檔就把原文蓋掉）⇒ 整份當壞檔。
+// 舊版寫入者只寫過：it[合法 id]＝物件；hidden[合法 id]＝true（cd31059、cf61e0f）或非 0 的時間戳 ±t（1784419）；v2 只寫 true。
+test("F4／讀不懂的單題紀錄或隱藏設定：整份當壞檔（v1、v2 都是），不默默略過", () => {
+  const e = { n: 1, ok: 1, bad: 0, s: 1, m: false, last: "2026-10-13", due: "2026-10-14", log: [] };
+  const bad = [
+    { it: { a: [] } }, { it: { a: null } }, { it: { a: "x" } }, { it: { a: 3 } }, { it: { a: true } }, { it: { "壞 id": e } },
+    { it: { a: e }, hidden: { "壞 id": true } }, { hidden: { a: "true" } }, { hidden: { a: false } }, { hidden: { a: null } }, { hidden: { a: {} } },
+  ];
+  [1, 2].forEach((v) => bad.forEach((o) => {
+    const raw = JSON.stringify(Object.assign({ v, settings: { sound: false, tone: 4 } }, o));
+    assert.equal(C.decode(raw).ok, false, raw);
+  }));
+  // v1 特有：0、NaN 字串等不是舊版寫得出來的隱藏值；v2 特有：數字（v2 只寫 true）
+  [{ a: 0 }, { a: "1" }].forEach((h) => assert.equal(C.decode(JSON.stringify({ v: 1, it: {}, hidden: h })).ok, false, JSON.stringify(h)));
+  [{ a: 1 }, { a: -5 }, { a: 1760000000000 }].forEach((h) => assert.equal(C.decode(JSON.stringify({ v: 2, it: {}, hidden: h })).ok, false, JSON.stringify(h)));
+  // 對照：合法的照常讀
+  assert.equal(C.decode(JSON.stringify({ v: 2, it: { a: e }, hidden: { b: true } })).ok, true);
+  assert.equal(C.decode(JSON.stringify({ v: 1, it: { a: e }, hidden: { b: true, c: -5, d: 1760000000000 } })).ok, true);
 });
 
 // ===== 原「逐題合併」反例（Codex 審 151f6f09、cf61e0ff）=====

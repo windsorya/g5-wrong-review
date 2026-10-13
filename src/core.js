@@ -121,17 +121,25 @@
     if (!isObj(o) || (o.v !== 1 && o.v !== 2)) return { ok: false };
     if ((o.it !== undefined && !isObj(o.it)) || (o.hidden !== undefined && !isObj(o.hidden)) || (o.settings !== undefined && !isObj(o.settings))) return { ok: false };
     var st = blank(), src = o.it || {}, hid = o.hidden || {};
+    // 任何一筆讀不懂的紀錄都不能默默略過（略過後下一次存檔就把原文蓋掉；Codex 審 1ed44f8 F4）⇒ 整份當壞檔。
+    // 寫入者只寫過：it[合法 id]＝物件；hidden[合法 id]＝true（v2 與 cd31059／cf61e0f 的 v1）或非 0 的時間戳 ±t（1784419 的 v1）。
+    var recOk = Object.keys(src).every(function (id) { return ID.test(id) && isObj(src[id]); });
+    var hidOk = Object.keys(hid).every(function (id) {
+      var x = hid[id];
+      return ID.test(id) && (x === true || (o.v === 1 && typeof x === "number" && Number.isFinite(x) && x !== 0));
+    });
+    if (!recOk || !hidOk) return { ok: false };
     st.settings = cleanSettings(o.settings);
     if (o.v === 2) {
-      Object.keys(hid).forEach(function (id) { if (ID.test(id) && hid[id] === true) st.hidden[id] = true; });
-      Object.keys(src).forEach(function (id) { if (ID.test(id) && isObj(src[id])) st.it[id] = cleanEntry(src[id]); });
+      Object.keys(hid).forEach(function (id) { st.hidden[id] = true; });
+      Object.keys(src).forEach(function (id) { st.it[id] = cleanEntry(src[id]); });
       return { ok: true, from: 2, st: st };
     }
     // v1 遷移（設計書第 7 條）：hidden 為 true 或正數＝隱藏、負數＝已恢復；作答紀錄依舊判準 t >= resetAt 整理一次（缺少視為 0）。
     // 相等時間曾造成的清除歧義無法追溯推定，保留資料（讓家長重新清除）。
     var num = function (x) { return typeof x === "number" && Number.isFinite(x) ? x : 0; }, resetAt = num(o.resetAt);
-    Object.keys(hid).forEach(function (id) { var x = hid[id]; if (ID.test(id) && (x === true || (typeof x === "number" && Number.isFinite(x) && x > 0))) st.hidden[id] = true; });
-    Object.keys(src).forEach(function (id) { var e = src[id]; if (ID.test(id) && isObj(e) && num(e.t) >= resetAt) st.it[id] = cleanEntry(e); });
+    Object.keys(hid).forEach(function (id) { var x = hid[id]; if (x === true || x > 0) st.hidden[id] = true; });
+    Object.keys(src).forEach(function (id) { var e = src[id]; if (num(e.t) >= resetAt) st.it[id] = cleanEntry(e); });
     return { ok: true, from: 1, st: st };
   }
 
