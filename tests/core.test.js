@@ -71,6 +71,13 @@ test("學會的題目當天又做錯：取消學會、明天再出", () => {
   assert.equal(st.it.a.m, false); assert.equal(st.it.a.s, 0); assert.equal(st.it.a.due, "2026-10-18");
 });
 
+test("學會的題當天又做錯：回報 counted=true（進度確實變了，畫面不可說不影響）——Codex 審 151f6f09", () => {
+  let st = C.blank();
+  ["2026-10-13", "2026-10-14", "2026-10-17"].forEach((d) => { st = C.record(st, "a", true, d).state; });
+  assert.equal(C.record(st, "a", false, "2026-10-17").counted, true);
+  assert.equal(C.record(st, "a", true, "2026-10-17").counted, false);   // 同一天再答對才是真的不影響
+});
+
 test("record 不改到傳進來的舊 state", () => {
   const st = C.blank(), before = JSON.stringify(st);
   C.record(st, "a", true, D0);

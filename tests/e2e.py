@@ -200,6 +200,66 @@ def flow_hide_reset(browser, label, device=None):
     ctx.close()
 
 
+def flow_codex_151f6f09(browser):
+    """Codex 審 151f6f09 抓到的四個反例，各重現一次。"""
+    # ①兩個分頁同時練：A 答兩題、B 再答一題，三題紀錄都要在；A 清除後 B 作答不可把舊紀錄寫回
+    ctx = browser.new_context()
+    ctx.add_init_script(f"window.G5WrongTestItems = {json.dumps(ITEMS, ensure_ascii=False)};")
+    a, b = ctx.new_page(), ctx.new_page()
+    errs = []
+    for p in (a, b):
+        p.on("pageerror", lambda e: errs.append(str(e)))
+        p.goto(URL); p.wait_for_selector("#goToday")
+    # A 練自然（1 題）；B 練全部科目（數學→國語→自然，照加入日）。兩頁都在載入時拿到空紀錄。
+    a.locator('#main .sub[data-sub="自然"]').click(); b.locator('#main .sub[data-sub=""]').click()
+    ids = {answer(a, True)["id"]}
+    ids.add(answer(b, True)["id"])
+    saved = a.evaluate("Object.keys(JSON.parse(localStorage.getItem('g5wrong.v1')).it).sort()")
+    check("兩分頁同時練：兩頁各答的題紀錄都在（不互相覆蓋）", saved == sorted(ids) and len(saved) == 2, saved)
+    a.locator("#nextBtn").click(); a.locator("#homeBtn").click()
+    a.locator("#setBox summary").click(); a.locator("#resetBtn").click(); a.locator("#resetYes").click()
+    b.locator("#nextBtn").click()
+    if b.locator("#qText").count():
+        last = answer(b, True)["id"]
+        saved = a.evaluate("Object.keys(JSON.parse(localStorage.getItem('g5wrong.v1')).it)")
+        check("A 清除後 B 再作答：只多 B 這一題，舊紀錄沒有復活", saved == [last], saved)
+    else:
+        check("A 清除後 B 再作答：只多 B 這一題，舊紀錄沒有復活", False, "B 沒有下一題可答")
+    check("兩分頁流程沒有 JS 錯誤", not errs, errs)
+    ctx.close()
+    # ②練習中把下一題設成不用再練：不再出現
+    ctx, pg, errors = open_page(browser, items=ITEMS)
+    pg.locator("#goToday").click()
+    order = pg.evaluate("G5WrongCore.dueList(G5WrongTestItems.map(x=>x), {v:1,it:{},hidden:{}}, G5WrongCore.dayKey(Date.now())).map(x=>x.id)")
+    pg.locator("#listBox > summary").click()
+    pg.locator(f'[data-hide="{order[1]}"]').click()
+    answer(pg, True); pg.locator("#nextBtn").click()
+    shown = cur_item(pg)["id"] if pg.locator("#qText").count() else None
+    s = pg.evaluate("G5WrongApp.state()")
+    check("練習中隱藏的題：直接跳過、不記錄", shown != order[1] and order[1] not in s["it"], (order, shown))
+    check("隱藏流程沒有 JS 錯誤", not errors, errors)
+    ctx.close()
+    # ③清除時存不進去：不可宣告成功、紀錄不變
+    ctx, pg, errors = open_page(browser, items=ITEMS)
+    pg.locator("#goToday").click(); answer(pg, True); pg.locator("#quit").click()
+    pg.evaluate("() => { Storage.prototype.setItem = function(){ throw new DOMException('full', 'QuotaExceededError'); }; }")
+    pg.locator("#setBox summary").click(); pg.locator("#resetBtn").click(); pg.locator("#resetYes").click()
+    msg = pg.locator("#resetMsg").inner_text()
+    check("清除存不進去：照實說沒成功、畫面紀錄維持原樣", "沒有清除成功" in msg and pg.evaluate("Object.keys(G5WrongApp.state().it).length") == 1, msg)
+    ctx.close()
+    # ④學會的題當天又做錯：不可說「不影響進度」
+    t = None
+    ctx, pg, errors = open_page(browser, items=ITEMS[:1])
+    t = today(pg)
+    st = {"v": 1, "it": {ITEMS[0]["id"]: {"n": 3, "ok": 3, "bad": 0, "s": 3, "m": True, "last": t, "due": t, "log": []}}, "hidden": {}, "settings": {"sound": False, "tone": 0}}
+    pg.evaluate(f"localStorage.setItem('g5wrong.v1', {json.dumps(json.dumps(st))})")
+    pg.reload(); pg.wait_for_selector("#goToday")
+    pg.locator("#goToday").click(); answer(pg, False)
+    fb = pg.locator("#fb").inner_text()
+    check("學會的題當天又做錯：不顯示「只算練習」、取消學會", "只算練習" not in fb and pg.evaluate(f"G5WrongApp.state().it['{ITEMS[0]['id']}'].m") is False, fb)
+    ctx.close()
+
+
 def flow_upload(browser):
     sent, mine = [], {"ok": True, "lastFetch": 0, "items": [
         {"id": "u1", "time": 1760000000000, "subject": "數學", "note": "【錯題】10/8 分數", "status": "fetched", "url": ""},
@@ -241,6 +301,7 @@ def main():
         flow_practice(cr, "手機390", {"viewport": {"width": 390, "height": 844}, "is_mobile": True, "has_touch": True, "device_scale_factor": 2})
         flow_master(cr)
         flow_hide_reset(cr, "桌機", {"viewport": {"width": 1280, "height": 900}})
+        flow_codex_151f6f09(cr)
         flow_upload(cr)
         cr.close()
         wk = p.webkit.launch()

@@ -122,8 +122,8 @@
         e.s = 0; e.m = false; e.due = addDays(today, 1);
       }
     } else if (!right && e.m) {
-      // 學會的題目同一天又做錯：不算進度，但取消「學會」，明天再出（寧可多練一次）
-      e.m = false; e.s = 0; e.due = addDays(today, 1);
+      // 學會的題目同一天又做錯：取消「學會」，明天再出（寧可多練一次）——進度確實變了，所以算進度（Codex 審 151f6f09：原本回報「不影響進度」與實際不符）
+      e.m = false; e.s = 0; e.due = addDays(today, 1); counted = true;
     }
     st.it[id] = e;
     return { state: st, counted: counted };

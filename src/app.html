@@ -172,8 +172,10 @@ function banner(){
   if (badItems.length) h += '<div class="banner">有 ' + badItems.length + ' 題資料有問題先不出：' + esc(badItems.join("；")) + '</div>';
   $("#banners").innerHTML = h;
 }
+// 每次寫入前先重讀存檔再套用這次的改動（Codex 審 151f6f09：兩個分頁同時練，各拿手上舊的整份覆寫，會互相蓋掉；清除後另一頁作答會把舊紀錄寫回）
+function fresh(){ try { st = C.clean(JSON.parse(localStorage.getItem(KEY) || "null")); } catch (e) {} }
 load();
-window.addEventListener("storage", function(e){ if (e.key === KEY && !sess) { load(); render(); } });
+window.addEventListener("storage", function(e){ if (e.key === KEY) { load(); if (!sess) render(); } });
 
 var actx = null;
 function chime(i){
@@ -191,6 +193,7 @@ function start(list, label){
 function byId(id){ for (var i = 0; i < ITEMS.length; i++) if (ITEMS[i].id === id) return ITEMS[i]; return null; }
 function answer(val){
   if (!sess || sess.answered) return;
+  fresh();
   var it = byId(sess.queue[sess.i]), ok = C.isRight(it, val), wasM = !!(st.it[it.id] || {}).m;
   var r = C.record(st, it.id, ok, today()); st = r.state; save();
   sess.answered = true; sess.last = { val: val, ok: ok, counted: r.counted };
@@ -272,6 +275,8 @@ function render(){
   var d = Math.round((Date.parse(EXAM + "T00:00:00+08:00") - Date.parse(today() + "T00:00:00+08:00")) / 86400000);
   $("#days").textContent = d >= 0 ? d : "–";
   banner();
+  // 練習中被設成「不用再練」的題直接跳過（Codex 審 151f6f09：原本照樣出題、照樣記錄）；正在看解說的那題不跳，等按下一題
+  if (sess) { var cur = sess.queue[sess.i]; if (!(sess.answered && cur)) while (sess.i < sess.queue.length && st.hidden[sess.queue[sess.i]]) sess.i++; }
   var main = $("#main");
   if (!sess) main.innerHTML = renderHome();
   else if (sess.i >= sess.queue.length) main.innerHTML = renderDone();
@@ -283,13 +288,19 @@ function render(){
   main.querySelectorAll(".sub").forEach(function(b){ b.onclick = function(){ var s = b.getAttribute("data-sub"); start(C.examList(VIS(), st, s), (s || "全部科目") + "考前總複習"); }; });
   $("#list").querySelectorAll("[data-hide],[data-unhide]").forEach(function(b){ b.onclick = function(){
     var id = b.getAttribute("data-hide") || b.getAttribute("data-unhide");
-    st = C.setHidden(st, id, b.hasAttribute("data-hide")); save(); render();
+    fresh(); st = C.setHidden(st, id, b.hasAttribute("data-hide")); save(); render();
   }; });
   if (keepOpen && $("#hiddenBox")) $("#hiddenBox").open = true;
   var rs = $("#resetBtn"), rc = $("#resetSure");
   rs.onclick = function(){ rc.hidden = false; rs.hidden = true; $("#resetMsg").textContent = "真的要清除嗎？她練過的天數與學會的題目都會歸零（題目本身不會刪）。"; };
   $("#resetNo").onclick = function(){ rc.hidden = true; rs.hidden = false; $("#resetMsg").textContent = ""; };
-  $("#resetYes").onclick = function(){ st = C.resetProgress(st); sess = null; save(); rc.hidden = true; rs.hidden = false; render(); $("#resetMsg").textContent = "已清除全部作答紀錄。"; };
+  $("#resetYes").onclick = function(){
+    // 存不進去就退回原狀並照實說（Codex 審 151f6f09：原本存檔失敗仍宣告已清除，重新整理舊紀錄又回來）
+    fresh(); var old = st; st = C.resetProgress(st);
+    var ok = save(); if (ok) sess = null; else st = old;
+    rc.hidden = true; rs.hidden = false; render();
+    $("#resetMsg").textContent = ok ? "已清除全部作答紀錄。" : "沒有清除成功：這台裝置現在存不了資料，紀錄維持原樣。";
+  };
   if (sess && sess.i < sess.queue.length) {
     var it = byId(sess.queue[sess.i]);
     main.querySelectorAll(".opt").forEach(function(b){ b.onclick = function(){ var k = +b.getAttribute("data-k"); answer(it.type === "tf" ? k === 0 : k); }; });
