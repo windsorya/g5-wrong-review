@@ -20,7 +20,7 @@ test("題目檢查：合格題沒有問題，各種壞資料都抓得到", () =>
   assert.deepEqual(C.itemProblems(item({ type: "tf", a: false, opts: undefined })), []);
   assert.deepEqual(C.itemProblems(item({ type: "fill", a: ["0.5", "1/2"], opts: undefined })), []);
   const bad = [
-    null, item({ id: "有 空白" }), item({ subject: "體育" }), item({ source: " " }), item({ added: "2026-13-01" }),
+    null, item({ id: "有 空白" }), item({ id: "__proto__" }), item({ subject: "體育" }), item({ source: " " }), item({ added: "2026-13-01" }),
     item({ type: "essay" }), item({ q: "" }), item({ why: "" }), item({ opts: ["只有一個"] }), item({ a: 3 }), item({ a: 1.5 }),
     item({ opts: ["A", "Ａ", "B"] }), item({ type: "tf", a: "true" }), item({ type: "fill", a: [] }), item({ type: "fill", a: "0.5" }), item({ type: "fill", a: [" "] }),
   ];
@@ -105,19 +105,22 @@ test("考前總複習：該科每題都出（含學會、未到期），沒學�
   assert.deepEqual(S["數學"], { total: 2, mastered: 1, due: 1 }); assert.deepEqual(S["國語"], { total: 1, mastered: 0, due: 1 });
 });
 
-test("讀進來的紀錄：壞掉的欄位丟掉，不弄壞整頁（v1 遷移與 v2 同一套欄位整理）", () => {
+// 原本這支斷言「壞掉的欄位丟掉／改成預設值、照常讀進來」；那正是契約 7 禁止的行為（修正後下一次存檔就把原文蓋掉；
+// Codex 審 1ed44f8 F4、449939b F4b）。改成：同樣的壞輸入一律 ok:false；合法輸入原樣讀出。
+test("讀進來的紀錄：讀不懂就整份擋下、不修正欄位；合法紀錄原樣讀出（v1 遷移與 v2 同一套判準）", () => {
   ["null", '{"v":3,"it":{}}', '"x"'].forEach((raw) => assert.equal(C.decode(raw).ok, false, raw));   // 讀不懂≠空白（設計書第 7 條）
   assert.deepEqual(C.decode(null).st, C.blank());
+  const good = { n: 3, ok: 2, bad: 1, s: 3, m: true, last: "2026-10-13", due: "2026-10-20", log: [["2026-10-13", 1]] };
   [1, 2].forEach((v) => {
-    const d = C.decode(JSON.stringify({ v, settings: { sound: false, tone: 99 }, it: {
-      ok1: { n: 3, ok: 2, bad: 1, s: 9, m: true, last: "2026-10-13", due: "2026-10-20", log: [["2026-10-13", 1], ["壞", 1], ["2026-10-12", 5]] },
-      neg: { n: -1, ok: "3", due: "明天" },
-    } }));
-    assert.equal(d.ok, true); const c = d.st;
-    assert.deepEqual(Object.keys(c.it).sort(), ["neg", "ok1"]);
-    assert.equal(c.it.ok1.s, C.MASTER); assert.deepEqual(c.it.ok1.log, [["2026-10-13", 1]]);
-    assert.equal(c.it.neg.n, 0); assert.equal(c.it.neg.ok, 0); assert.equal(c.it.neg.due, "");
-    assert.equal(c.settings.sound, false); assert.equal(c.settings.tone, 0); assert.equal(c.v, 2);
+    const bads = [
+      { settings: { sound: false, tone: 99 }, it: { ok1: good } },
+      { settings: { sound: false, tone: 1 }, it: { ok1: Object.assign({}, good, { s: 9 }) } },
+      { settings: { sound: false, tone: 1 }, it: { ok1: Object.assign({}, good, { log: [["2026-10-13", 1], ["壞", 1], ["2026-10-12", 5]] }) } },
+      { settings: { sound: false, tone: 1 }, it: { neg: { n: -1, ok: "3", due: "明天" } } },
+    ];
+    bads.forEach((o) => assert.equal(C.decode(JSON.stringify(Object.assign({ v }, o))).ok, false, JSON.stringify(o)));
+    const d = C.decode(JSON.stringify({ v, settings: { sound: false, tone: 4 }, it: { ok1: good } }));
+    assert.equal(d.ok, true); assert.deepEqual(d.st.it.ok1, good); assert.deepEqual(d.st.settings, { sound: false, tone: 4 }); assert.equal(d.st.v, 2);
   });
 });
 

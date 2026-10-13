@@ -29,7 +29,7 @@
   function itemProblems(it) {
     var bad = [], s = function (x) { return typeof x === "string" && x.trim() !== ""; };
     if (!it || typeof it !== "object") return ["不是物件"];
-    if (!s(it.id) || !/^[\w-]{1,60}$/.test(it.id)) bad.push("id 不合法");
+    if (!s(it.id) || !/^[\w-]{1,60}$/.test(it.id) || it.id === "__proto__") bad.push("id 不合法");   // __proto__：存檔讀回會被當壞檔（見 okId）
     if (SUBJECTS.indexOf(it.subject) < 0) bad.push("科目不在清單：" + it.subject);
     if (!s(it.source)) bad.push("沒寫出處（哪一次小考）");
     if (!isDay(it.added)) bad.push("added 日期不合法");
@@ -94,6 +94,25 @@
   }
   var ID = /^[\w-]{1,60}$/;
   function isObj(x) { return !!x && typeof x === "object" && !Array.isArray(x); }
+  function isNat(x) { return Number.isInteger(x) && x >= 0; }
+  // __proto__ 寫進物件會變成改原型、不是存資料 ⇒ 不當成合法的題目代號
+  function okId(id) { return ID.test(id) && id !== "__proto__"; }
+  var ENTRY_KEYS = ["n", "ok", "bad", "s", "m", "last", "due", "log"];
+  // 一筆作答紀錄是否正是寫入程式寫得出來的樣子（嚴格檢查，不修正；用於 decode 判斷壞檔）
+  function entryOk(e, ver) {
+    if (!isObj(e)) return false;
+    if (!Object.keys(e).every(function (k) { return ENTRY_KEYS.indexOf(k) >= 0 || (ver === 1 && k === "t"); })) return false;
+    if (!ENTRY_KEYS.every(function (k) { return Object.prototype.hasOwnProperty.call(e, k); })) return false;
+    if (!isNat(e.n) || !isNat(e.ok) || !isNat(e.bad) || !(isNat(e.s) && e.s <= MASTER) || typeof e.m !== "boolean") return false;
+    if (!(e.last === "" || isDay(e.last)) || !(e.due === "" || isDay(e.due))) return false;
+    if (ver === 1 && e.t !== undefined && !isNat(e.t)) return false;
+    return Array.isArray(e.log) && e.log.length <= LOG_MAX &&
+      e.log.every(function (l) { return Array.isArray(l) && l.length === 2 && isDay(l[0]) && (l[1] === 0 || l[1] === 1); });
+  }
+  function settingsOk(s) {
+    return isObj(s) && Object.keys(s).every(function (k) { return k === "sound" || k === "tone"; }) &&
+      typeof s.sound === "boolean" && Number.isInteger(s.tone) && s.tone >= 0 && s.tone < 10;
+  }
   // 一筆作答紀錄的欄位整理：壞掉的欄位丟掉（設成預設值），不讓一筆壞資料弄壞整頁
   function cleanEntry(e) {
     var n = function (x) { return Number.isInteger(x) && x >= 0 ? x : 0; };
@@ -121,14 +140,19 @@
     if (!isObj(o) || (o.v !== 1 && o.v !== 2)) return { ok: false };
     if ((o.it !== undefined && !isObj(o.it)) || (o.hidden !== undefined && !isObj(o.hidden)) || (o.settings !== undefined && !isObj(o.settings))) return { ok: false };
     var st = blank(), src = o.it || {}, hid = o.hidden || {};
-    // 任何一筆讀不懂的紀錄都不能默默略過（略過後下一次存檔就把原文蓋掉；Codex 審 1ed44f8 F4）⇒ 整份當壞檔。
-    // 寫入者只寫過：it[合法 id]＝物件；hidden[合法 id]＝true（v2 與 cd31059／cf61e0f 的 v1）或非 0 的時間戳 ±t（1784419 的 v1）。
-    var recOk = Object.keys(src).every(function (id) { return ID.test(id) && isObj(src[id]); });
+    // 只接受歷代寫入程式實際寫出過的格式；任何一處讀不懂都整份當壞檔，讀檔時不「修正」任何欄位——
+    // 修正後下一次存檔就把原文蓋掉（Codex 審 1ed44f8 F4：it.a=[] 被略過；449939b F4b：n:[3] 被改成 0）。
+    // 歷代格式：151f6f0（v1，沒有 hidden）、cd31059／cf61e0f（v1，hidden＝true）、1784419（v1，加 resetAt 與每題 t，hidden＝非 0 的 ±時間戳）、
+    // 現行 v2（沒有 t、沒有 resetAt，hidden＝true）。每題固定 8 欄：n／ok／bad／s／m／last／due／log。
+    var TOP = o.v === 1 ? ["v", "it", "hidden", "settings", "resetAt"] : ["v", "it", "hidden", "settings"];
+    if (!Object.keys(o).every(function (k) { return TOP.indexOf(k) >= 0; })) return { ok: false };
+    if (o.v === 1 && o.resetAt !== undefined && !isNat(o.resetAt)) return { ok: false };
+    var recOk = Object.keys(src).every(function (id) { return okId(id) && entryOk(src[id], o.v); });
     var hidOk = Object.keys(hid).every(function (id) {
       var x = hid[id];
-      return ID.test(id) && (x === true || (o.v === 1 && typeof x === "number" && Number.isFinite(x) && x !== 0));
+      return okId(id) && (x === true || (o.v === 1 && typeof x === "number" && Number.isFinite(x) && x !== 0));
     });
-    if (!recOk || !hidOk) return { ok: false };
+    if (!recOk || !hidOk || (o.settings !== undefined && !settingsOk(o.settings))) return { ok: false };
     st.settings = cleanSettings(o.settings);
     if (o.v === 2) {
       Object.keys(hid).forEach(function (id) { st.hidden[id] = true; });

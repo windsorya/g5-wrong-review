@@ -331,6 +331,61 @@ test("23b／F4（Codex 審 1ed44f8）壞的單題紀錄 it.a=[]（v1、v2 各一
   }
 });
 
+// F4b（Codex 審 449939b）：單題紀錄是物件、但欄位型別錯（n:[3] 等），原本被 cleanEntry 默默改成預設值、再把原文蓋掉。
+// 判準：只接受歷代寫入程式實際寫出過的格式（151f6f0／cd31059／cf61e0f／1784419 的 v1、現行 v2），其他一律整份當壞檔。
+const BAD_ENTRY = [
+  { n: [3] }, { ok: "3" }, { bad: -1 }, { s: 4 }, { s: 1.5 }, { m: "true" }, { last: "2026-13-01" }, { due: 5 },
+  { log: "x" }, { log: [["2026-10-12", 2]] }, { log: [["2026-10-12"]] }, { log: [["壞日期", 1]] }, { log: [["2026-10-12", 1, 9]] },
+  { x: 1 }, { n: undefined }
+];
+const BAD_SETTINGS = [{ sound: "no", tone: 0 }, { sound: true, tone: "2" }, { sound: true, tone: 10 }, { sound: true, tone: 0, x: 1 }, { sound: true }];
+test("23c／F4b（Codex 審 449939b）欄位型別錯誤（v1、v2 各一）：BADFILE、改設定與作答都被拒、原文逐字不變、零寫入", async () => {
+  const raws = [];
+  for (const v of [1, 2]) {
+    for (const o of BAD_ENTRY) raws.push(JSON.stringify({ v, it: { a: entry(o) }, hidden: {}, settings: { sound: false, tone: 4 } }));
+    for (const s of BAD_SETTINGS) raws.push(JSON.stringify({ v, it: { a: entry() }, hidden: {}, settings: s }));
+    raws.push(JSON.stringify({ v, it: {}, hidden: {}, settings: { sound: true, tone: 0 }, foo: 1 }));                       // 多出不認得的頂層欄位
+    raws.push(JSON.stringify({ v, it: { a: entry({ log: Array.from({ length: C.LOG_MAX + 1 }, () => ["2026-10-12", 1]) }) }, hidden: {}, settings: { sound: true, tone: 0 } }));
+  }
+  raws.push('{"v":2,"it":{"a":{"n":[3],"ok":3,"bad":0,"s":3,"m":true,"last":"2026-10-13","due":"2026-10-20","log":[]}},"hidden":{},"settings":{"sound":false,"tone":4}}');   // Codex 報告原例
+  raws.push(JSON.stringify({ v: 2, it: { a: entry({ t: 5 }) }, hidden: {}, settings: { sound: true, tone: 0 } }));         // t 只有 v1 寫過
+  raws.push('{"v":2,"it":{"__proto__":' + JSON.stringify(entry()) + '},"hidden":{},"settings":{"sound":true,"tone":0}}');  // __proto__ 寫進物件＝改原型
+  raws.push('{"v":2,"it":{},"hidden":{"__proto__":true},"settings":{"sound":true,"tone":0}}');
+  raws.push(JSON.stringify({ v: 2, it: {}, hidden: {}, resetAt: 0, settings: { sound: true, tone: 0 } }));                  // resetAt 只有 v1 寫過
+  raws.push(JSON.stringify({ v: 1, it: { a: entry({ t: -1 }) }, hidden: {}, settings: { sound: true, tone: 0 } }));
+  raws.push(JSON.stringify({ v: 1, it: { a: entry({ t: "9" }) }, hidden: {}, settings: { sound: true, tone: 0 } }));
+  raws.push(JSON.stringify({ v: 1, it: {}, hidden: {}, resetAt: -1, settings: { sound: true, tone: 0 } }));
+  raws.push(JSON.stringify({ v: 1, it: {}, hidden: {}, resetAt: "5", settings: { sound: true, tone: 0 } }));
+  for (const raw of raws) {
+    assert.equal(C.decode(raw).ok, false, "decode 應擋下：" + raw);
+    const w = world(raw); const A = tab(w); await flush();
+    assert.equal(A.view().mode, "BADFILE", raw); assert.match(A.view().msg, /讀不懂/, raw);
+    assert.equal(A.setSound(A.token(), true, 2).ok, false, raw);
+    assert.equal(A.startExam(A.token(), "數學").ok, false, raw);
+    assert.equal(A.reset(A.token()).ok, false, raw);
+    assert.equal(w.store.raw(), raw, raw); assert.equal(w.store.sets, 0, raw);
+  }
+});
+
+test("23d／歷代寫入程式寫出過的合法格式都讀得懂、內容不被改動（防擋過頭的對照組）", () => {
+  const e = entry(), keep = (d, id) => { const x = Object.assign({}, d.st.it[id]); return x; };
+  const legal = [
+    { raw: JSON.stringify({ v: 1, it: { a: e }, settings: { sound: true, tone: 0 } }), from: 1 },                                   // 151f6f0：沒有 hidden
+    { raw: JSON.stringify({ v: 1, it: { a: e }, hidden: { b: true }, settings: { sound: false, tone: 9 } }), from: 1, hid: ["b"] },  // cd31059／cf61e0f
+    { raw: JSON.stringify({ v: 1, it: { a: Object.assign({ t: 0 }, e), c: Object.assign({ t: 1791900000000 }, e) }, hidden: { b: 1791900000001, d: -1791900000002, f: 1 }, resetAt: 0, settings: { sound: true, tone: 3 } }), from: 1, hid: ["b", "f"] },   // 1784419
+    { raw: JSON.stringify({ v: 2, it: { a: e }, hidden: { b: true }, settings: { sound: true, tone: 2 } }), from: 2, hid: ["b"] },
+    { raw: JSON.stringify({ v: 2, it: { a: entry({ log: Array.from({ length: C.LOG_MAX }, () => ["2026-10-12", 0]) }) }, hidden: {}, settings: { sound: true, tone: 0 } }), from: 2 },
+    { raw: JSON.stringify({ v: 2, it: { a: entry({ last: "", due: "", log: [], n: 0, ok: 0, bad: 0, s: 0 }) }, hidden: {}, settings: { sound: true, tone: 0 } }), from: 2 },
+  ];
+  for (const L of legal) {
+    const d = C.decode(L.raw), o = JSON.parse(L.raw);
+    assert.equal(d.ok, true, L.raw); assert.equal(d.from, L.from, L.raw);
+    Object.keys(o.it).forEach((id) => { const want = Object.assign({}, o.it[id]); delete want.t; assert.deepEqual(keep(d, id), want, L.raw); });
+    assert.deepEqual(Object.keys(d.st.hidden).sort(), (L.hid || []).sort(), L.raw);
+    assert.deepEqual(d.st.settings, o.settings, L.raw);
+  }
+});
+
 test("24／真正沒有存檔：可開始、答題前不寫空白 key；首次答案後 D.it.a.n=1", async () => {
   const w = world(); const A = tab(w); await flush();
   assert.equal(A.view().mode, "READY"); assert.equal(w.store.raw(), null); assert.equal(w.store.sets, 0);
