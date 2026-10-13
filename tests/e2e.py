@@ -193,7 +193,7 @@ def flow_hide_reset(browser, label, device=None):
     pg.locator(f'[data-hide="{ITEMS[1]["id"]}"]').click()
     pg.locator("#resetBtn").click(); pg.locator("#resetYes").click()
     s = pg.evaluate("G5WrongApp.state()")
-    check(f"{label} 確定清除：作答紀錄歸零、隱藏名單保留、今天要練回到 2", s["it"] == {} and s["hidden"] == {ITEMS[1]["id"]: True} and pg.locator("#dueN").inner_text() == "2", s)
+    check(f"{label} 確定清除：作答紀錄歸零、隱藏名單保留、今天要練回到 2", s["it"] == {} and [k for k, v in s["hidden"].items() if v is True or v > 0] == [ITEMS[1]["id"]] and pg.locator("#dueN").inner_text() == "2", s)
     pg.reload(); pg.wait_for_selector("#main .btn")
     check(f"{label} 清除後重新整理仍是清除狀態", pg.evaluate("Object.keys(G5WrongApp.state().it).length") == 0)
     check(f"{label} 清除／隱藏流程沒有 JS 錯誤", not errors, errors)
@@ -260,6 +260,39 @@ def flow_codex_151f6f09(browser):
     ctx.close()
 
 
+def flow_codex_cf61e0ff(browser):
+    """Codex 審 cf61e0ff 的反例（真瀏覽器）。"""
+    # ①存不進去時答 a、b，恢復後答 c ⇒ a、b、c 都在
+    ctx, pg, errors = open_page(browser, items=ITEMS)
+    pg.evaluate("() => { window.__realSet = Storage.prototype.setItem; Storage.prototype.setItem = function(){ throw new DOMException('full', 'QuotaExceededError'); }; }")
+    pg.locator('#main .sub[data-sub=""]').click()
+    ids = [answer(pg, True)["id"]]; pg.locator("#nextBtn").click()
+    ids.append(answer(pg, True)["id"]); pg.locator("#nextBtn").click()
+    pg.evaluate("() => { Storage.prototype.setItem = window.__realSet; }")
+    ids.append(answer(pg, True)["id"])
+    saved = pg.evaluate("Object.keys(JSON.parse(localStorage.getItem('g5wrong.v1')).it).sort()")
+    check("存不進去期間答的 2 題：恢復後再答 1 題，3 題都存進去", saved == sorted(ids), (saved, ids))
+    check("存檔失敗流程沒有 JS 錯誤", not errors, errors)
+    ctx.close()
+    # ②另一分頁把這頁正在出的題設成不用再練 ⇒ 這頁跳過、不記錄
+    ctx = browser.new_context()
+    ctx.add_init_script(f"window.G5WrongTestItems = {json.dumps(ITEMS, ensure_ascii=False)};")
+    a, b = ctx.new_page(), ctx.new_page()
+    for p in (a, b):
+        p.goto(URL); p.wait_for_selector("#goToday")
+    a.locator('#main .sub[data-sub=""]').click()
+    cur = cur_item(a)["id"]
+    b.locator("#listBox > summary").click(); b.locator(f'[data-hide="{cur}"]').click()
+    a.wait_for_timeout(300)
+    now = cur_item(a)["id"] if a.locator("#qText").count() else None
+    if now == cur:   # 事件還沒到也要擋：按下作答時重讀才發現
+        k = 0
+        a.locator(f'#main .opt[data-k="{k}"], #fillGo').first.click()
+    s = a.evaluate("JSON.parse(localStorage.getItem('g5wrong.v1'))")
+    check("別頁隱藏目前這題：這頁跳過、不記錄", cur not in s.get("it", {}) and (a.locator("#qText").count() == 0 or cur_item(a)["id"] != cur), (cur, now, list(s.get("it", {}))))
+    ctx.close()
+
+
 def flow_upload(browser):
     sent, mine = [], {"ok": True, "lastFetch": 0, "items": [
         {"id": "u1", "time": 1760000000000, "subject": "數學", "note": "【錯題】10/8 分數", "status": "fetched", "url": ""},
@@ -302,6 +335,7 @@ def main():
         flow_master(cr)
         flow_hide_reset(cr, "桌機", {"viewport": {"width": 1280, "height": 900}})
         flow_codex_151f6f09(cr)
+        flow_codex_cf61e0ff(cr)
         flow_upload(cr)
         cr.close()
         wk = p.webkit.launch()

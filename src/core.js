@@ -71,16 +71,45 @@
 
   // hidden：爸媽按「不用再練」的題（2026-10-13 律師：「為何我測試用的題目，我沒法清除？有無清除或重置按鈕？」）——
   //   只藏起來不刪，清單底下可以恢復；題目本身寫在題庫程式裡，各台裝置都一樣，所以藏的是「這個家不練它」。
-  function blank() { return { v: 1, it: {}, hidden: {}, settings: { sound: true, tone: 0 } }; }
-  function visible(items, state) { var h = (state && state.hidden) || {}; return items.filter(function (it) { return !h[it.id]; }); }
-  function setHidden(state, id, on) {
-    var st = JSON.parse(JSON.stringify(state));
+  // 資料模型（Codex 審 151f6f09、cf61e0ff 連兩輪抓到多分頁／存檔失敗的覆蓋問題後改）：
+  //   紀錄不是「整份誰最後寫誰贏」，而是逐題合併——每題作答紀錄 it[id].t、每個隱藏設定 hidden[id] 都帶修改時間（毫秒），
+  //   清除＝記一個 resetAt（之前的作答紀錄一律作廢）。merge(甲, 乙) 逐題取較新的那筆，所以：
+  //   ・兩個分頁各寫各的題，不會互相蓋掉；・存不進去時記憶體裡的進度不會被重讀蓋掉，下次存得進去就一起存；
+  //   ・別頁清除後，這頁舊的紀錄比 resetAt 舊，合併時自動丟掉，不會復活。
+  //   hidden[id]：正數＝那個時間設成不用再練；負數＝那個時間恢復（留著是為了合併時比得出誰新）；舊版的 true 視為很早以前隱藏。
+  function blank() { return { v: 1, it: {}, hidden: {}, resetAt: 0, settings: { sound: true, tone: 0 } }; }
+  function isHidden(state, id) { var h = (state && state.hidden) || {}; return h[id] === true || (typeof h[id] === "number" && h[id] > 0); }
+  function visible(items, state) { return items.filter(function (it) { return !isHidden(state, it.id); }); }
+  function setHidden(state, id, on, now) {
+    var st = JSON.parse(JSON.stringify(state)), t = Math.max(1, now || Date.now());
     st.hidden = st.hidden || {};
-    if (on) st.hidden[id] = true; else delete st.hidden[id];
+    st.hidden[id] = on ? t : -t;
     return st;
   }
   // 清除全部作答紀錄：進度歸零，保留提示音設定與「不用再練」名單（那是爸媽的選擇，不是作答紀錄）
-  function resetProgress(state) { var st = blank(); st.settings = JSON.parse(JSON.stringify(state.settings)); st.hidden = JSON.parse(JSON.stringify(state.hidden || {})); return st; }
+  function resetProgress(state, now) {
+    var st = blank();
+    st.settings = JSON.parse(JSON.stringify(state.settings)); st.hidden = JSON.parse(JSON.stringify(state.hidden || {}));
+    st.resetAt = Math.max(state.resetAt || 0, now || Date.now());
+    return st;
+  }
+  // 逐題合併：base＝存檔裡讀到的、mine＝這個分頁記憶體裡的；設定以 mine 為準（是這頁剛改的）
+  function merge(base, mine) {
+    var st = blank(), ids = {};
+    st.settings = JSON.parse(JSON.stringify(mine.settings));
+    st.resetAt = Math.max(base.resetAt || 0, mine.resetAt || 0);
+    Object.keys(base.it).concat(Object.keys(mine.it)).forEach(function (id) { ids[id] = 1; });
+    Object.keys(ids).forEach(function (id) {
+      var a = base.it[id], b = mine.it[id], w = !a ? b : !b ? a : ((b.t || 0) >= (a.t || 0) ? b : a);
+      if ((w.t || 0) >= st.resetAt) st.it[id] = JSON.parse(JSON.stringify(w));
+    });
+    var hv = function (x) { return x === true ? 1 : typeof x === "number" ? x : 0; };
+    Object.keys(base.hidden || {}).concat(Object.keys(mine.hidden || {})).forEach(function (id) {
+      var a = hv((base.hidden || {})[id]), b = hv((mine.hidden || {})[id]);
+      st.hidden[id] = Math.abs(b) >= Math.abs(a) ? b : a;
+    });
+    return st;
+  }
   // 讀進來的紀錄一律重新整理：壞掉的欄位丟掉，不讓一筆壞資料弄壞整頁
   function clean(raw) {
     var st = blank();
@@ -90,8 +119,14 @@
       st.settings.tone = Number.isInteger(raw.settings.tone) && raw.settings.tone >= 0 && raw.settings.tone < 10 ? raw.settings.tone : 0;
     }
     if (raw.hidden && typeof raw.hidden === "object") {
-      Object.keys(raw.hidden).forEach(function (id) { if (/^[\w-]{1,60}$/.test(id) && raw.hidden[id] === true) st.hidden[id] = true; });
+      Object.keys(raw.hidden).forEach(function (id) {
+        var x = raw.hidden[id];
+        if (!/^[\w-]{1,60}$/.test(id)) return;
+        if (x === true) st.hidden[id] = 1;   // 舊版格式
+        else if (typeof x === "number" && Number.isFinite(x) && x !== 0) st.hidden[id] = x;
+      });
     }
+    st.resetAt = Number.isInteger(raw.resetAt) && raw.resetAt > 0 ? raw.resetAt : 0;
     var src = raw.it && typeof raw.it === "object" ? raw.it : {};
     Object.keys(src).forEach(function (id) {
       var e = src[id];
@@ -99,7 +134,7 @@
       var n = function (x) { return Number.isInteger(x) && x >= 0 ? x : 0; };
       st.it[id] = {
         n: n(e.n), ok: n(e.ok), bad: n(e.bad), s: Math.min(n(e.s), MASTER), m: e.m === true,
-        last: isDay(e.last) ? e.last : "", due: isDay(e.due) ? e.due : "",
+        last: isDay(e.last) ? e.last : "", due: isDay(e.due) ? e.due : "", t: n(e.t),
         log: Array.isArray(e.log) ? e.log.filter(function (l) { return Array.isArray(l) && isDay(l[0]) && (l[1] === 0 || l[1] === 1); }).slice(-LOG_MAX) : []
       };
     });
@@ -107,8 +142,9 @@
   }
 
   // 記一次作答。回傳新的 state（不改舊的），以及這次有沒有算進進度（counted）。
-  function record(state, id, right, today) {
-    var st = JSON.parse(JSON.stringify(state)), e = st.it[id] || { n: 0, ok: 0, bad: 0, s: 0, m: false, last: "", due: "", log: [] };
+  function record(state, id, right, today, now) {
+    var st = JSON.parse(JSON.stringify(state)), e = st.it[id] || { n: 0, ok: 0, bad: 0, s: 0, m: false, last: "", due: "", log: [], t: 0 };
+    e.t = Math.max((e.t || 0) + 1, now || Date.now(), st.resetAt || 0);   // 修改時間（逐題合併用），一定比舊的新、不早於清除時間
     e.n += 1; if (right) e.ok += 1; else e.bad += 1;
     e.log.push([today, right ? 1 : 0]); if (e.log.length > LOG_MAX) e.log = e.log.slice(-LOG_MAX);
     var counted = e.last !== today;
@@ -171,7 +207,7 @@
   var api = {
     SUBJECTS: SUBJECTS, TYPES: TYPES, MASTER: MASTER, GAP: GAP, KEEP: KEEP, LOG_MAX: LOG_MAX,
     dayKey: dayKey, addDays: addDays, isDay: isDay, itemProblems: itemProblems, norm: norm, isRight: isRight, answerText: answerText,
-    blank: blank, clean: clean, visible: visible, setHidden: setHidden, resetProgress: resetProgress, record: record, dueList: dueList, examList: examList, stats: stats, status: status
+    blank: blank, clean: clean, visible: visible, isHidden: isHidden, setHidden: setHidden, resetProgress: resetProgress, merge: merge, record: record, dueList: dueList, examList: examList, stats: stats, status: status
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.G5WrongCore = api;
 })(typeof window !== "undefined" ? window : this);

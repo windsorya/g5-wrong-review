@@ -151,12 +151,56 @@ test("清除全部作答紀錄：進度歸零，保留提示音設定與隱藏�
   st.settings = { sound: false, tone: 4 };
   st = C.setHidden(st, "b", true);
   const r = C.resetProgress(st);
-  assert.deepEqual(r.it, {}); assert.deepEqual(r.settings, { sound: false, tone: 4 }); assert.deepEqual(r.hidden, { b: true });
+  assert.deepEqual(r.it, {}); assert.deepEqual(r.settings, { sound: false, tone: 4 }); assert.ok(C.isHidden(r, "b"));
   assert.equal(Object.keys(st.it).length, 1);   // 不改舊的
 });
 
 test("讀進來的隱藏名單：只收合法 id 且值為 true", () => {
-  const c = C.clean({ v: 1, it: {}, hidden: { ok: true, no: 1, "壞 id": true } });
-  assert.deepEqual(c.hidden, { ok: true });
+  const c = C.clean({ v: 1, it: {}, hidden: { ok: true, ts: 1760000000000, back: -5, zero: 0, str: "1", "壞 id": true } });
+  assert.deepEqual(c.hidden, { ok: 1, ts: 1760000000000, back: -5 });   // 舊版 true 視為很早以前隱藏；負數＝已恢復
+  assert.ok(C.isHidden(c, "ok") && C.isHidden(c, "ts") && !C.isHidden(c, "back"));
   assert.deepEqual(C.clean({ v: 1, it: {}, hidden: "x" }).hidden, {});
+});
+
+// ===== 逐題合併（Codex 審 151f6f09、cf61e0ff 的反例，逐一寫成測試）=====
+const rec = (st, id, ok, now) => C.record(st, id, ok, C.dayKey(now), now).state;
+test("合併①存不進去的期間：記憶體的 a、b 不會被重讀蓋掉，之後存得進去 a、b、c 都在", () => {
+  const disk = C.blank();                                   // 存檔一直是空的（a、b 都沒存進去）
+  let mem = rec(rec(C.blank(), "a", true, 1000), "b", true, 2000);
+  mem = C.merge(disk, mem);                                 // 重讀（fresh）
+  mem = rec(mem, "c", true, 3000);
+  assert.deepEqual(Object.keys(C.merge(disk, mem).it).sort(), ["a", "b", "c"]);
+});
+
+test("合併②讀寫交錯：A 讀完、B 存了 b、A 再存 a ⇒ a、b 都在", () => {
+  const disk0 = C.blank();
+  let A = C.merge(disk0, C.blank());                        // A 讀到空的
+  const diskB = C.merge(disk0, rec(C.blank(), "b", true, 2000));   // B 存了 b
+  A = rec(A, "a", true, 2500);                              // A 手上沒有 b
+  assert.deepEqual(Object.keys(C.merge(diskB, A).it).sort(), ["a", "b"]);
+});
+
+test("合併③別頁清除後：這頁手上的舊紀錄不復活，清除後新答的照留", () => {
+  let A = rec(C.blank(), "old", true, 1000);                // A 手上有舊紀錄
+  const diskReset = C.resetProgress(C.merge(C.blank(), A), 5000);  // B 在 5000 清除
+  A = rec(A, "new", true, 6000);                            // A 沒看到清除，又答一題
+  const m = C.merge(diskReset, A);
+  assert.deepEqual(Object.keys(m.it), ["new"]); assert.equal(m.resetAt, 5000);
+  const m2 = C.merge(A, diskReset);                         // 反過來合併也一樣
+  assert.deepEqual(Object.keys(m2.it), ["new"]);
+});
+
+test("合併④同一題兩頁都答：取較新的那筆；隱藏與恢復取較新的設定", () => {
+  const a1 = rec(C.blank(), "q", false, 1000), a2 = rec(C.blank(), "q", true, 2000);
+  assert.equal(C.merge(a1, a2).it.q.ok, 1); assert.equal(C.merge(a2, a1).it.q.ok, 1);
+  const hid = C.setHidden(C.blank(), "q", true, 3000), back = C.setHidden(C.blank(), "q", false, 4000);
+  assert.ok(!C.isHidden(C.merge(hid, back), "q")); assert.ok(!C.isHidden(C.merge(back, hid), "q"));
+  assert.ok(C.isHidden(C.merge(C.blank(), hid), "q"));      // 別頁剛隱藏、這頁沒動 ⇒ 合併後是隱藏
+});
+
+test("合併⑤舊版存檔（沒有 t、hidden 是 true）：合併不丟資料；清除後才作廢", () => {
+  const legacy = C.clean({ v: 1, it: { x: { n: 1, ok: 1, bad: 0, s: 1, m: false, last: "2026-10-13", due: "2026-10-14", log: [] } }, hidden: { y: true } });
+  const m = C.merge(legacy, C.blank());
+  assert.deepEqual(Object.keys(m.it), ["x"]); assert.ok(C.isHidden(m, "y"));
+  assert.deepEqual(C.merge(legacy, C.resetProgress(legacy, 9000)).it, {});
 });

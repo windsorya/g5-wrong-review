@@ -162,8 +162,12 @@ function today(){ return C.dayKey(Date.now()); }
 // 存檔：讀不到或寫不進去要講出來（不默默弄丟她的進度）
 var canStore = true, st;
 function load(){ try { st = C.clean(JSON.parse(localStorage.getItem(KEY) || "null")); } catch (e) { canStore = false; st = C.blank(); } }
+// 存檔＝在同一個同步步驟裡「讀存檔→和記憶體逐題合併→寫回」（C.merge，見 src/core.js 資料模型說明）。
+// 寫成功才採用合併結果；寫不進去記憶體原封不動（Codex 審 cf61e0ff：原本重讀會把還沒存進去的進度蓋掉）。
+function stored(){ try { return C.clean(JSON.parse(localStorage.getItem(KEY) || "null")); } catch (e) { return null; } }
 function save(){
-  try { localStorage.setItem(KEY, JSON.stringify(st)); return true; }
+  var base = stored(), merged = base ? C.merge(base, st) : st;
+  try { localStorage.setItem(KEY, JSON.stringify(merged)); st = merged; canStore = true; return true; }
   catch (e) { canStore = false; banner(); return false; }
 }
 function banner(){
@@ -172,10 +176,15 @@ function banner(){
   if (badItems.length) h += '<div class="banner">有 ' + badItems.length + ' 題資料有問題先不出：' + esc(badItems.join("；")) + '</div>';
   $("#banners").innerHTML = h;
 }
-// 每次寫入前先重讀存檔再套用這次的改動（Codex 審 151f6f09：兩個分頁同時練，各拿手上舊的整份覆寫，會互相蓋掉；清除後另一頁作答會把舊紀錄寫回）
-function fresh(){ try { st = C.clean(JSON.parse(localStorage.getItem(KEY) || "null")); } catch (e) {} }
+// 看別的分頁改了什麼：合併進記憶體，不是整份取代（Codex 審 151f6f09／cf61e0ff）
+function fresh(){ var base = stored(); if (base) st = C.merge(base, st); }
 load();
-window.addEventListener("storage", function(e){ if (e.key === KEY) { load(); if (!sess) render(); } });
+window.addEventListener("storage", function(e){
+  if (e.key !== KEY) return;
+  fresh();
+  // 練習中：別頁把目前這題設成不用再練，這頁要馬上跳過（Codex 審 cf61e0ff：原本照樣出題、照樣記錄）
+  if (!sess || (!sess.answered && C.isHidden(st, sess.queue[sess.i]))) render();
+});
 
 var actx = null;
 function chime(i){
@@ -194,8 +203,9 @@ function byId(id){ for (var i = 0; i < ITEMS.length; i++) if (ITEMS[i].id === id
 function answer(val){
   if (!sess || sess.answered) return;
   fresh();
+  if (C.isHidden(st, sess.queue[sess.i])) { render(); return; }   // 這題剛被設成不用再練：不記錄，render 會跳到下一題
   var it = byId(sess.queue[sess.i]), ok = C.isRight(it, val), wasM = !!(st.it[it.id] || {}).m;
-  var r = C.record(st, it.id, ok, today()); st = r.state; save();
+  var r = C.record(st, it.id, ok, today(), Date.now()); st = r.state; save();
   sess.answered = true; sess.last = { val: val, ok: ok, counted: r.counted };
   if (ok) { sess.right++; chime(); if (!wasM && st.it[it.id].m) sess.mastered++; }
   else { sess.wrong++; if (!sess.requeued[it.id]) { sess.requeued[it.id] = 1; sess.queue.push(it.id); } }
@@ -257,7 +267,7 @@ function renderDone(){
 }
 function renderList(){
   if (!ITEMS.length) return '<span class="muted">還沒有錯題。</span>';
-  var t = today(), V = VIS(), H = ITEMS.filter(function(it){ return st.hidden[it.id]; });
+  var t = today(), V = VIS(), H = ITEMS.filter(function(it){ return C.isHidden(st, it.id); });
   var short = function(it){ return esc(it.q.length > 40 ? it.q.slice(0, 40) + "…" : it.q); };
   var h = C.SUBJECTS.filter(function(s){ return V.some(function(it){ return it.subject === s; }); }).map(function(s){
     return '<div style="display:grid;gap:6px"><h3>' + esc(s) + '</h3>' + V.filter(function(it){ return it.subject === s; }).map(function(it){
@@ -276,7 +286,7 @@ function render(){
   $("#days").textContent = d >= 0 ? d : "–";
   banner();
   // 練習中被設成「不用再練」的題直接跳過（Codex 審 151f6f09：原本照樣出題、照樣記錄）；正在看解說的那題不跳，等按下一題
-  if (sess) { var cur = sess.queue[sess.i]; if (!(sess.answered && cur)) while (sess.i < sess.queue.length && st.hidden[sess.queue[sess.i]]) sess.i++; }
+  if (sess) { var cur = sess.queue[sess.i]; if (!(sess.answered && cur)) while (sess.i < sess.queue.length && C.isHidden(st, sess.queue[sess.i])) sess.i++; }
   var main = $("#main");
   if (!sess) main.innerHTML = renderHome();
   else if (sess.i >= sess.queue.length) main.innerHTML = renderDone();
@@ -288,7 +298,7 @@ function render(){
   main.querySelectorAll(".sub").forEach(function(b){ b.onclick = function(){ var s = b.getAttribute("data-sub"); start(C.examList(VIS(), st, s), (s || "全部科目") + "考前總複習"); }; });
   $("#list").querySelectorAll("[data-hide],[data-unhide]").forEach(function(b){ b.onclick = function(){
     var id = b.getAttribute("data-hide") || b.getAttribute("data-unhide");
-    fresh(); st = C.setHidden(st, id, b.hasAttribute("data-hide")); save(); render();
+    fresh(); st = C.setHidden(st, id, b.hasAttribute("data-hide"), Date.now()); save(); render();
   }; });
   if (keepOpen && $("#hiddenBox")) $("#hiddenBox").open = true;
   var rs = $("#resetBtn"), rc = $("#resetSure");
@@ -296,7 +306,7 @@ function render(){
   $("#resetNo").onclick = function(){ rc.hidden = true; rs.hidden = false; $("#resetMsg").textContent = ""; };
   $("#resetYes").onclick = function(){
     // 存不進去就退回原狀並照實說（Codex 審 151f6f09：原本存檔失敗仍宣告已清除，重新整理舊紀錄又回來）
-    fresh(); var old = st; st = C.resetProgress(st);
+    fresh(); var old = st; st = C.resetProgress(st, Date.now());
     var ok = save(); if (ok) sess = null; else st = old;
     rc.hidden = true; rs.hidden = false; render();
     $("#resetMsg").textContent = ok ? "已清除全部作答紀錄。" : "沒有清除成功：這台裝置現在存不了資料，紀錄維持原樣。";
