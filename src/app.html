@@ -131,9 +131,9 @@ details[open]>summary{margin-bottom:12px}
   <nav id="siteNav" aria-label="切換網站"><a href="https://windsorya.github.io/g5-sci-review/">五上自然複習</a><a href="https://windsorya.github.io/g5-math-review/">五上數學複習</a><a href="https://windsorya.github.io/g5-chinese-review/">五上國語複習</a><a href="https://windsorya.github.io/g5-social-review/">五上社會複習</a><span aria-current="page">錯題複習</span><a href="https://windsorya.github.io/g5-help/">難題解說</a></nav>
   <header class="hero">
     <h1>錯題複習</h1>
-    <span>學校小考做錯的題目，練到連續三天都答對</span>
+    <span>學校小考做錯的題目，分三天練、連續答對三次就學會</span>
     <span class="small muted">第一次定期評量 11/5（四）～11/6（五）・還有 <b id="days">–</b> 天</span>
-    <div class="flow" aria-hidden="true"><span class="st"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>第 1 天<br>答對</span><i></i><span class="st"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>第 2 天<br>答對</span><i></i><span class="st"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>第 3 天<br>答對</span><i></i><span class="st"><span class="dot ok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20v-8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M11.5 13C7.5 13 5 10.2 5 6.5c4 0 6.5 2.8 6.5 6.5zM12.5 11c3.5 0 6-2.5 6-6-3.5 0-6 2.5-6 6z" fill="currentColor"/></svg></span>學會了</span></div>
+    <div class="flow" aria-hidden="true"><span class="st"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>第 1 次<br>答對</span><i></i><span class="st"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>明天<br>再答對</span><i></i><span class="st"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>3 天後<br>再答對</span><i></i><span class="st"><span class="dot ok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20v-8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M11.5 13C7.5 13 5 10.2 5 6.5c4 0 6.5 2.8 6.5 6.5zM12.5 11c3.5 0 6-2.5 6-6-3.5 0-6 2.5-6 6z" fill="currentColor"/></svg></span>學會了</span></div>
   </header>
   <div id="banners" aria-live="polite"></div>
   <main class="panel" id="main" aria-live="polite"></main>
@@ -229,7 +229,7 @@ function homeFor(ITEMS, st){   // 參數 ITEMS＝沒被隱藏的題（刻意與�
   var t = today(), due = C.dueList(ITEMS, st, t), S = C.stats(ITEMS, st, t), m = 0;
   Object.keys(S).forEach(function(k){ m += S[k].mastered; });
   if (!ITEMS.length) {
-    return '<div class="empty"><span class="sect-t">還沒有錯題</span><p style="margin:0">學校小考做錯的題目，會一題一題放在這裡，每天練一點，練到連續三天都答對就算學會。</p>' +
+    return '<div class="empty"><span class="sect-t">還沒有錯題</span><p style="margin:0">學校小考做錯的題目，會一題一題放在這裡，每天練一點，分三天、連續答對三次就算學會。</p>' +
       '<ol><li>爸媽打開下面「爸媽：上傳錯題」，選科目、拍照送出。</li><li>電腦會把題目重新打字、查好答案和解說。</li><li>做好後就會出現在這裡，也會出現在「全部錯題清單」。</li></ol></div>';
   }
   var subs = C.SUBJECTS.filter(function(s){ return S[s]; });
@@ -270,7 +270,7 @@ function renderQuestion(sess){
 }
 function renderDone(sess){
   return '<div class="done"><b class="t">練完了！</b><span>' + esc(sess.label) + '：答對 ' + sess.right + ' 次、答錯 ' + sess.wrong + ' 次' + (sess.mastered ? '，新學會 ' + sess.mastered + ' 題' : "") + '。</span>' +
-    '<span class="small muted">答錯的題目明天會再出；連續三天都答對就算學會。</span><button class="btn" id="homeBtn" type="button">回首頁</button></div>';
+    '<span class="small muted">答錯的題目明天會再出；分三天、連續答對三次就算學會。</span><button class="btn" id="homeBtn" type="button">回首頁</button></div>';
 }
 function renderList(st){
   if (!ITEMS.length) return '<span class="muted">還沒有錯題。</span>';
