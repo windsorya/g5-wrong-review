@@ -108,13 +108,14 @@ details[open]>summary{margin-bottom:12px}
 .brandbar{display:flex;align-items:center;gap:10px;padding-top:16px}
 .brandbar .mark{width:36px;height:36px;flex:none;display:block}
 .brandbar .bname{font-family:var(--f-display);font-size:22px;line-height:1;letter-spacing:.08em;color:var(--ink)}
-#siteNav{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:16px;min-height:44px}
-#siteNav a,#siteNav [aria-current]{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:6px 14px;border-radius:999px;text-decoration:none;white-space:nowrap;border:1.5px solid var(--line);box-sizing:border-box}
+#siteNav{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:16px;min-height:44px}
+#siteNav a,#siteNav [aria-current]{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:6px 11px;border-radius:999px;text-decoration:none;white-space:nowrap;border:1.5px solid var(--line);box-sizing:border-box}
 #siteNav a{color:var(--ink);background:var(--card)}
 @media (hover:hover){#siteNav a:hover{border-color:var(--pri);color:var(--pri)}}
 #siteNav [aria-current]{background:var(--pri);border-color:var(--pri);color:var(--on-pri);font-weight:700}
-#siteNav>:nth-child(5){margin-left:14px}   /* 各科四站和錯題／難題兩個工具之間用間距分組（不加元素：切換列測試逐一比對子元素） */
+#siteNav>:nth-child(5){margin-left:10px}   /* 各科四站和錯題／難題兩個工具之間用間距分組（不加元素：切換列測試逐一比對子元素） */
 @media (max-width:600px){#siteNav{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:15px}#siteNav a,#siteNav [aria-current]{padding:6px 4px}#siteNav>:nth-child(5){margin-left:0}}
+@media (max-width:380px){#siteNav{grid-template-columns:repeat(2,1fr)}}   /* 320px 小手機放不下三欄六字（Codex 審 86f6b91） */
 /* hero 底下的流程條（錯題、難題站；2026-10-18）：用 HTML 排，手機上字不會縮到看不清 */
 .flow{display:flex;align-items:flex-start;margin-top:14px;max-width:560px}   /* 各站不一定有的配色變數都附預設色（錯題站沒有 --on-leaf） */
 .flow .st{display:grid;justify-items:center;gap:4px;flex:none;font-size:14px;line-height:1.3;color:var(--muted);text-align:center}
