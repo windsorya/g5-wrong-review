@@ -1,0 +1,972 @@
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="theme-color" content="#1f5f8b"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="錯題複習"></head><body><div id="previewBanner" style="background:#fff3cd;color:#5c4400;text-align:center;font-size:14px;line-height:1.5;padding:6px 12px">預覽版：外觀改版還沒上線。練習紀錄和正式站共用同一份。</div><title>荳荳研究所｜五年級錯題複習</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Huninn&display=swap">
+<style>
+/* 錯題複習（2026-10-13 律師：「專門複習我女兒在學校小考答錯的各科特定題目，希望能讓我上傳，以利之後考前或平常統一複習」）。
+   色票與元件沿用自然／數學／社會站（A 晴空實驗室），讓孩子在六站之間切換時看起來是同一套。 */
+:root{
+  --bg:#f4f8fb; --card:#ffffff; --ink:#17324a; --muted:#4a6276; --line:#c9d7e2; --line-soft:#dde7ef;
+  --pri:#1f5f8b; --pri-soft:#e9f2f8; --on-pri:#ffffff;
+  --sun:#b4770c; --sun-deep:#8a5a0a; --sun-soft:#f8ecd6;
+  --leaf:#2f7d4f; --leaf-soft:#e2efe6;
+  --bad:#b4442f; --bad-soft:#fbe7e2; --sky1:#cfe6f5;
+  --f-display:"Huninn","Noto Sans TC","PingFang TC","Heiti TC",sans-serif;
+  --f-body:"Noto Sans TC","PingFang TC","Heiti TC","Microsoft JhengHei",sans-serif;
+  --r:18px; --shadow:0 2px 10px rgba(23,50,74,.08);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1a24; --card:#172634; --ink:#e4eef6; --muted:#9db3c4; --line:#2c4256; --line-soft:#223545;
+  --pri:#6fb0de; --pri-soft:#1a3347; --on-pri:#0b1620;
+  --sun:#e6b25a; --sun-deep:#f0c879; --sun-soft:#3a2f1b;
+  --leaf:#6cc08e; --leaf-soft:#1c3328;
+  --bad:#ec8a74; --bad-soft:#3a221d; --sky1:#1b3550; --shadow:none; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1a24; --card:#172634; --ink:#e4eef6; --muted:#9db3c4; --line:#2c4256; --line-soft:#223545;
+  --pri:#6fb0de; --pri-soft:#1a3347; --on-pri:#0b1620;
+  --sun:#e6b25a; --sun-deep:#f0c879; --sun-soft:#3a2f1b;
+  --leaf:#6cc08e; --leaf-soft:#1c3328;
+  --bad:#ec8a74; --bad-soft:#3a221d; --sky1:#1b3550; --shadow:none; color-scheme:dark}
+[hidden]{display:none!important}
+html,body{background:var(--bg);color:var(--ink)}
+body{font-family:var(--f-body);font-size:17px;line-height:1.6;margin:0;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+button:disabled{cursor:default;opacity:.55}
+:focus-visible{outline:none;box-shadow:0 0 0 3px var(--bg),0 0 0 6px var(--pri)}
+h1,h2,h3{font-family:var(--f-display);font-weight:400;margin:0;text-wrap:balance;letter-spacing:.03em}
+.wrap{max-width:820px;margin:0 auto;padding:0 16px 56px;display:grid;gap:18px}
+.muted{color:var(--muted)} .small{font-size:15px}
+.hero{margin:0 -16px;background:var(--sky1);padding:24px 24px 20px;display:grid;gap:4px}
+.hero h1{font-size:clamp(32px,6vw,44px);line-height:1.15}
+.hero b{color:var(--sun-deep);font-variant-numeric:tabular-nums}
+@media (min-width:821px){.hero{margin:0;border-radius:0 0 var(--r) var(--r)}}
+.banner{border-radius:14px;padding:12px 16px;background:var(--bad-soft)}
+.panel{background:var(--card);border-radius:var(--r);padding:22px;display:grid;gap:16px;box-shadow:var(--shadow);min-width:0}
+.today{display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center}
+.today .big{display:grid;justify-items:center;min-width:88px}
+.today .big b{font-family:var(--f-display);font-weight:400;font-size:56px;line-height:1;color:var(--sun-deep);font-variant-numeric:tabular-nums}
+@media (max-width:520px){.today{grid-template-columns:1fr}.today .big{justify-items:start}}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.btn{background:var(--pri);color:var(--on-pri);border:0;border-radius:14px;padding:12px 22px;font-size:19px;font-weight:700;min-height:52px}
+.btn.ghost{background:var(--card);color:var(--ink);border:2px solid var(--line);font-weight:500;font-size:17px}
+.btn.sm{font-size:16px;padding:9px 14px;min-height:46px;font-weight:500}
+.sect-t{font-size:19px;font-weight:700}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.three div{background:var(--bg);border-radius:12px;padding:10px;display:grid;gap:2px}
+.three b{font-family:var(--f-display);font-weight:400;font-size:28px;color:var(--pri);font-variant-numeric:tabular-nums}
+.subs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:560px){.subs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sub{background:var(--card);border:2px solid var(--line);border-radius:16px;padding:12px 14px;display:grid;gap:2px;text-align:left;min-height:84px}
+.sub b{font-size:19px} .sub span{font-size:14px;color:var(--muted)}
+.sub.all{border-color:var(--pri)}
+.qhead{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:15px;color:var(--muted)}
+.bar{height:10px;border-radius:99px;background:var(--line-soft);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--leaf)}
+.tag{display:inline-block;background:var(--sun-soft);color:var(--sun-deep);border-radius:8px;padding:0 10px;font-size:14px}
+.q{font-size:clamp(21px,3.4vw,26px);line-height:1.5;font-weight:700;white-space:pre-wrap;overflow-wrap:anywhere}
+.opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:560px){.opts{grid-template-columns:1fr}}
+.opt{background:var(--card);border:2px solid var(--line);border-radius:14px;padding:14px 18px;text-align:left;font-size:20px;min-height:58px;overflow-wrap:anywhere}
+.opt.right{border:3px solid var(--leaf);background:var(--leaf-soft);opacity:1}
+.opt.wrong{border:3px solid var(--bad);background:var(--bad-soft);opacity:1}
+@media (hover:hover){.opt:hover:not(:disabled){border-color:var(--pri)}}
+.fill{display:flex;gap:10px;flex-wrap:wrap}
+.fill input{flex:1 1 220px;min-width:0;font-size:20px;min-height:52px;padding:8px 14px;border:2px solid var(--line);border-radius:14px;background:var(--bg)}
+.fb{border-radius:14px;padding:14px 16px;display:grid;gap:8px}
+.fb.ok{background:var(--leaf-soft)} .fb.no{background:var(--bad-soft)}
+.fb p{margin:0;line-height:1.7;white-space:pre-wrap}
+.her{background:var(--card);border-radius:10px;padding:8px 12px;font-size:16px}
+.done{text-align:center;display:grid;gap:14px;justify-items:center}
+.done b.t{font-family:var(--f-display);font-weight:400;font-size:32px;color:var(--leaf)}
+.empty{display:grid;gap:10px}
+.empty ol{margin:0;padding-left:22px;display:grid;gap:6px}
+details{background:var(--card);border-radius:var(--r);padding:16px 20px;box-shadow:var(--shadow)}
+details>summary{cursor:pointer;font-family:var(--f-display);font-size:20px;min-height:32px}
+details[open]>summary{margin-bottom:12px}
+.list{display:grid;gap:14px}
+.list h3{font-size:19px}
+.li{border-top:1px solid var(--line-soft);padding-top:8px;display:grid;gap:2px}
+.li span{font-size:14px;color:var(--muted)}
+.li .st-done{color:var(--leaf)} .li .st-due{color:var(--bad)}
+.form{display:grid;gap:12px}
+.form label{display:grid;gap:4px}
+.form select,.form textarea,.form input[type=file]{font-size:17px;border:2px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--bg);max-width:100%;box-sizing:border-box}
+.form textarea{min-height:90px}
+.hcard{border-top:1px solid var(--line-soft);padding-top:8px;display:grid;gap:2px}
+.hcard .meta{font-size:14px;color:var(--muted)}
+.g5s-panel{display:grid;gap:10px}
+.g5s-button{min-height:46px;padding:9px 16px;margin:4px 8px 4px 0;border:2px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font-size:17px;cursor:pointer}
+.g5s-input,.g5s-link{box-sizing:border-box;max-width:100%;padding:10px;font-size:17px;border:2px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.g5s-link{width:100%}
+.g5s-code{font-size:26px;font-weight:700;letter-spacing:.08em;font-variant-numeric:tabular-nums}
+.g5s-conflict{padding:14px;border:2px solid var(--sun);border-radius:12px;background:var(--sun-soft)}
+.g5s-notice{color:var(--bad)}
+.g5s-panel svg{width:180px;height:180px;background:#fff;padding:8px;border-radius:8px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+
+/* ===== 荳荳研究所共同頁首（2026-10-18；六站同一份，改這段要六站一起改）：品牌列＋切換列 ===== */
+.brandbar{display:flex;align-items:center;gap:10px;padding-top:16px}
+.brandbar .mark{width:36px;height:36px;flex:none;display:block}
+.brandbar .bname{font-family:var(--f-display);font-size:22px;line-height:1;letter-spacing:.08em;color:var(--ink)}
+#siteNav{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:16px;min-height:44px}
+#siteNav a,#siteNav [aria-current]{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:6px 11px;border-radius:999px;text-decoration:none;white-space:nowrap;border:1.5px solid var(--line);box-sizing:border-box}
+#siteNav a{color:var(--ink);background:var(--card)}
+@media (hover:hover){#siteNav a:hover{border-color:var(--pri);color:var(--pri)}}
+#siteNav [aria-current]{background:var(--pri);border-color:var(--pri);color:var(--on-pri);font-weight:700}
+#siteNav>:nth-child(5){margin-left:10px}   /* 各科四站和錯題／難題兩個工具之間用間距分組（不加元素：切換列測試逐一比對子元素） */
+@media (max-width:600px){#siteNav{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:15px}#siteNav a,#siteNav [aria-current]{padding:6px 4px}#siteNav>:nth-child(5){margin-left:0}}
+@media (max-width:380px){#siteNav{grid-template-columns:repeat(2,1fr)}}   /* 320px 小手機放不下三欄六字（Codex 審 86f6b91） */
+/* hero 底下的流程條（錯題、難題站；2026-10-18）：用 HTML 排，手機上字不會縮到看不清 */
+.flow{display:flex;align-items:flex-start;margin-top:14px;max-width:560px}   /* 各站不一定有的配色變數都附預設色（錯題站沒有 --on-leaf） */
+.flow .st{display:grid;justify-items:center;gap:4px;flex:none;font-size:14px;line-height:1.3;color:var(--muted);text-align:center}
+.flow .dot{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--card);border:2px solid var(--line);color:var(--pri);font-weight:700;font-size:18px}
+.flow .dot svg{width:22px;height:22px;display:block}
+.flow .dot.ok{background:var(--leaf);border-color:var(--leaf);color:var(--on-leaf,#ffffff)}
+.flow i{flex:1;min-width:12px;border-top:2px dashed var(--line);margin-top:20px}
+</style>
+
+<div class="wrap">
+  <!-- 六站切換（#1333 回首頁按鈕；#1351 國語、社會；2026-10-13 律師：難題解說放最右、錯題複習加在它左邊）：各科在前、跨科工具在後 -->
+  <div class="brandbar"><svg class="mark" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="31" fill="var(--pri)"/><path d="M32 47V29" stroke="var(--on-pri)" stroke-width="3.5" stroke-linecap="round"/><path d="M31 33C21 33 15 26 15 17c10 0 16 7 16 16z" fill="var(--leaf-soft,#e2efe6)"/><path d="M33 28c9 0 15-6 15-15-9 0-15 6-15 15z" fill="var(--grass,#8fc79a)"/><ellipse cx="32" cy="49" rx="12" ry="5" fill="var(--sunball,#f2b632)"/></svg><span class="bname" translate="no">荳荳研究所</span></div>
+  <nav id="siteNav" aria-label="切換網站"><a href="https://windsorya.github.io/g5-sci-review/preview/">五上自然複習</a><a href="https://windsorya.github.io/g5-math-review/preview/">五上數學複習</a><a href="https://windsorya.github.io/g5-chinese-review/preview/">五上國語複習</a><a href="https://windsorya.github.io/g5-social-review/preview/">五上社會複習</a><span aria-current="page">錯題複習</span><a href="https://windsorya.github.io/g5-help/preview/">難題解說</a></nav>
+  <header class="hero">
+    <h1>錯題複習</h1>
+    <span>學校小考做錯的題目，練到連續三天都答對</span>
+    <span class="small muted">第一次定期評量 11/5（四）～11/6（五）・還有 <b id="days">–</b> 天</span>
+    <div class="flow" aria-hidden="true"><span class="st"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>第 1 天<br>答對</span><i></i><span class="st"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>第 2 天<br>答對</span><i></i><span class="st"><span class="dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>第 3 天<br>答對</span><i></i><span class="st"><span class="dot ok"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20v-8" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M11.5 13C7.5 13 5 10.2 5 6.5c4 0 6.5 2.8 6.5 6.5zM12.5 11c3.5 0 6-2.5 6-6-3.5 0-6 2.5-6 6z" fill="currentColor"/></svg></span>學會了</span></div>
+  </header>
+  <div id="banners" aria-live="polite"></div>
+  <main class="panel" id="main" aria-live="polite"></main>
+  <details id="listBox"><summary>全部錯題清單</summary><div class="list" id="list"></div></details>
+  <details id="upBox"><summary>爸媽：上傳錯題</summary>
+    <div class="form">
+      <p class="small" style="margin:0">把小考上做錯的那一題拍照送出（一張照片一題最清楚）。電腦每 10 分鐘取一次，會把題目重新打字、查好答案和解說，加進上面的錯題。照片只存在家裡自己的雲端，不會放到網頁上。</p>
+      <label>科目<select id="upSubj"></select></label>
+      <label>照片<input type="file" id="upFile" accept="image/*"></label>
+      <label>補充（哪一次小考、她當時寫什麼、哪裡卡住；可不填）<textarea id="upNote" maxlength="480"></textarea></label>
+      <div class="row"><button class="btn" type="button" id="upSend">送出這一題</button><span class="small" id="upMsg" role="status"></span></div>
+      <div class="small muted" id="upHealth"></div>
+      <div id="upList"></div>
+    </div>
+  </details>
+  <details id="syncBox"><summary>換電腦或 iPad 也能接著練（跨裝置同步）</summary><div id="g5sync"></div></details>
+  <details id="setBox"><summary>設定</summary>
+    <div style="display:grid;gap:14px">
+      <div class="row"><label for="snd">答對提示音</label><select id="snd" style="font-size:17px;min-height:46px;padding:6px 10px;border:2px solid var(--line);border-radius:12px;background:var(--card)"></select><button class="btn ghost sm" type="button" id="sndTry">試聽</button></div>
+      <p class="small muted" style="margin:0">規則：每天第一次作答才算數。連續三個不同天都答對＝學會，之後每 7 天再出一次；答錯就從頭算，明天再練。「考前總複習」不管排程，該科每一題都會出。</p>
+      <div style="display:grid;gap:8px">
+        <span class="sect-t" style="font-size:17px">清除或重置</span>
+        <p class="small muted" style="margin:0">某一題不想再練：到「全部錯題清單」按那題的「不用再練」，之後也能恢復。想讓全部進度從頭開始：按下面清除。</p>
+        <div class="row"><button class="btn ghost sm" type="button" id="resetBtn">清除全部作答紀錄</button>
+          <span id="resetSure" hidden><button class="btn sm" type="button" id="resetYes" style="background:var(--bad)">確定清除</button> <button class="btn ghost sm" type="button" id="resetNo">不要清除</button></span></div>
+        <span class="small" id="resetMsg" role="status"></span>
+      </div>
+      <p class="small muted" id="storeMsg" style="margin:0"></p>
+    </div>
+  </details>
+</div>
+
+<script>
+// 答對提示音 10 種（2026-10-13 律師：「請提供十種音效或音樂，讓我可以設定（她）自己手動選擇」）。
+// 全部用 Web Audio 現場合成：不載外部音檔（沒有版權問題、離線也能播），每種 1.2 秒內結束。
+// play(ctx, t0) 只用 createOscillator／createGain／createBuffer，node 測試用假的 AudioContext 驗長度與音量。
+(function (root) {
+  "use strict";
+  // 一個音：頻率 f、開始 at（秒）、長度 dur、波形 type、音量 vol
+  function note(ctx, t0, f, at, dur, type, vol, slideTo) {
+    var o = ctx.createOscillator(), g = ctx.createGain(), t = t0 + at;
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(f, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol || 0.12, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+    return t + dur + 0.02;
+  }
+  // 拍手：短促的雜訊
+  function clap(ctx, t0, at, vol) {
+    var len = Math.floor(ctx.sampleRate * 0.08), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    var s = ctx.createBufferSource(), g = ctx.createGain(), t = t0 + at;
+    s.buffer = buf; g.gain.setValueAtTime(vol || 0.25, t);
+    s.connect(g); g.connect(ctx.destination); s.start(t); s.stop(t + 0.1);
+    return t + 0.1;
+  }
+  var C5 = 523.25, D5 = 587.33, E5 = 659.25, G5 = 783.99, A5 = 880, C6 = 1046.5, E6 = 1318.5, G6 = 1568;
+  var TONES = [
+    { name: "叮咚", play: function (c, t) { note(c, t, 660, 0, 0.25); return note(c, t, 880, 0.12, 0.3); } },   // 原本那一種
+    { name: "鈴鐺", play: function (c, t) { note(c, t, G6, 0, 0.6, "sine", 0.08); return note(c, t, G6 * 2.76, 0, 0.35, "sine", 0.03); } },
+    { name: "木琴三連音", play: function (c, t) { note(c, t, C5, 0, 0.18, "triangle"); note(c, t, E5, 0.1, 0.18, "triangle"); return note(c, t, G5, 0.2, 0.3, "triangle"); } },
+    { name: "星星閃爍", play: function (c, t) { var e = 0; [C6, E6, G6, E6 * 2].forEach(function (f, i) { e = note(c, t, f, i * 0.07, 0.15, "sine", 0.06); }); return e; } },
+    { name: "拍手", play: function (c, t) { clap(c, t, 0); clap(c, t, 0.15); return clap(c, t, 0.3); } },
+    { name: "小號號角", play: function (c, t) { note(c, t, G5, 0, 0.12, "sawtooth", 0.05); note(c, t, G5, 0.14, 0.12, "sawtooth", 0.05); return note(c, t, C6, 0.28, 0.45, "sawtooth", 0.05); } },
+    { name: "水滴", play: function (c, t) { note(c, t, 1200, 0, 0.12, "sine", 0.12, 500); return note(c, t, 1500, 0.15, 0.12, "sine", 0.1, 650); } },
+    { name: "彈跳", play: function (c, t) { return note(c, t, 300, 0, 0.35, "square", 0.04, 900); } },
+    { name: "豎琴滑音", play: function (c, t) { var e = 0; [C5, D5, E5, G5, A5, C6].forEach(function (f, i) { e = note(c, t, f, i * 0.06, 0.35, "triangle", 0.07); }); return e; } },
+    { name: "八音盒", play: function (c, t) { var e = 0; [[E6, 0], [C6, 0.18], [G5 * 2, 0.36], [C6 * 2, 0.6]].forEach(function (p) { e = note(c, t, p[0], p[1], 0.4, "sine", 0.06); }); return e; } }
+  ];
+  function play(ctx, i) { var k = TONES[i] ? i : 0; return TONES[k].play(ctx, ctx.currentTime); }
+  var api = { TONES: TONES, play: play };
+  if (typeof module !== "undefined" && module.exports) module.exports = api; else root.G5Tones = api;
+})(typeof window !== "undefined" ? window : this);
+
+</script>
+<script>
+// 錯題本題庫：學校小考答錯的題目，一題一個物件。
+// 加題流程（律師在本站或難題站「上傳錯題」→ ~/scripts/g5_help_inbox.py 取回 → 記成交辦）：
+//   ①看照片，題目重新打字（不貼原圖；網頁與 GitHub 原始檔公開，不放名字、學校、班級、老師批改字跡）
+//   ②答案獨立查證：數學用程式算、其他科查課本用語；填充題把可接受的寫法都列進 a
+//   ③why 寫「為什麼是這個答案」＋「容易錯在哪」，小五每句 ≤40 字、難詞第一次出現加白話
+//   ④her 寫她當時的錯答案（照片看得到才寫；看不清楚就不寫，禁猜）
+//   ⑤node --test tests/*.test.js、python3.12 tests/e2e.py，push 後 g5_help_inbox.py --done <傳題 ID> <id>
+// 欄位：id（w-科目代號-月日-序號）、subject（國語／數學／自然／社會／英文／其他）、source（哪一次小考）、added（加入日 YYYY-MM-DD）、
+//       type（choice 選擇／tf 是非／fill 填充）、q 題目、opts 選項（choice）、a 答案（choice＝選項編號、tf＝true/false、fill＝可接受寫法陣列）、
+//       her（她當時寫的，可省）、why 解說、upload（傳題 ID，可省）
+(function (root) {
+  "use strict";
+  var ITEMS = [
+  ];
+  var api = { ITEMS: ITEMS };
+  if (typeof module !== "undefined" && module.exports) module.exports = api; else root.G5WrongBank = api;
+})(typeof window !== "undefined" ? window : this);
+
+</script>
+<script>
+// 錯題複習核心（純函式，node 測試與網頁共用同一份）。
+// 由來：2026-10-13 律師「加上錯題複習，專門複習我女兒在學校小考答錯的各科特定題目，希望能讓我上傳，以利之後考前或平常統一複習」。
+// 規則（寫死在這裡，網頁只呼叫）：
+//   ・每天第一次作答那一題才算數（同一天重做只算練習，不影響進度）——避免當天連按三次就「學會」。
+//   ・答對一天 → 隔 1 天再出；連兩天對 → 隔 3 天；連三天（不同天）都對 → 學會，之後 7 天出一次保溫。
+//   ・答錯 → 連對天數歸零、明天再出；當次複習的最後也會再出一次。
+//   ・考前總複習：不看排程，出那一科（或全部）每一題，沒學會的排前面。
+(function (root) {
+  "use strict";
+  var SUBJECTS = ["國語", "數學", "自然", "社會", "英文", "其他"];
+  var TYPES = ["choice", "fill", "tf"];
+  var MASTER = 3;               // 連續答對幾個不同天＝學會
+  var GAP = [0, 1, 3];          // 連對 0／1／2 天時，隔幾天再出
+  var KEEP = 7;                 // 學會後隔幾天出一次
+  var LOG_MAX = 60;             // cap-why: 每題紀錄只留最近 60 筆，同步用的試算表單格上限 50000 字元，題數多時要留空間
+
+  // 台北日期 YYYY-MM-DD（不依賴裝置時區）
+  function dayKey(ms) {
+    var d = new Date(ms + 8 * 3600000);
+    return d.getUTCFullYear() + "-" + ("0" + (d.getUTCMonth() + 1)).slice(-2) + "-" + ("0" + d.getUTCDate()).slice(-2);
+  }
+  function addDays(day, n) {
+    var p = day.split("-").map(Number), t = Date.UTC(p[0], p[1] - 1, p[2]) + n * 86400000, d = new Date(t);
+    return d.getUTCFullYear() + "-" + ("0" + (d.getUTCMonth() + 1)).slice(-2) + "-" + ("0" + d.getUTCDate()).slice(-2);
+  }
+  function isDay(s) { return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && addDays(s, 0) === s; }
+
+  // 題目檢查：回傳問題清單（空＝合格）。題庫測試與網頁載入都用這一支。
+  function itemProblems(it) {
+    var bad = [], s = function (x) { return typeof x === "string" && x.trim() !== ""; };
+    if (!it || typeof it !== "object") return ["不是物件"];
+    if (!s(it.id) || !/^[\w-]{1,60}$/.test(it.id) || it.id === "__proto__") bad.push("id 不合法");   // __proto__：存檔讀回會被當壞檔（見 okId）
+    if (SUBJECTS.indexOf(it.subject) < 0) bad.push("科目不在清單：" + it.subject);
+    if (!s(it.source)) bad.push("沒寫出處（哪一次小考）");
+    if (!isDay(it.added)) bad.push("added 日期不合法");
+    if (TYPES.indexOf(it.type) < 0) bad.push("type 不合法：" + it.type);
+    if (!s(it.q)) bad.push("沒有題目");
+    if (!s(it.why)) bad.push("沒有解說（為什麼）");
+    if (it.type === "choice") {
+      if (!Array.isArray(it.opts) || it.opts.length < 2 || !it.opts.every(s)) bad.push("選項至少兩個且不可空白");
+      else {
+        if (!(typeof it.a === "number" && it.a >= 0 && it.a < it.opts.length && Math.floor(it.a) === it.a)) bad.push("答案不是選項編號");
+        var seen = {};
+        it.opts.forEach(function (o) { if (seen[norm(o)]) bad.push("選項重複：" + o); seen[norm(o)] = 1; });
+      }
+    }
+    if (it.type === "tf" && typeof it.a !== "boolean") bad.push("是非題答案要是 true／false");
+    if (it.type === "fill") {
+      if (!Array.isArray(it.a) || !it.a.length || !it.a.every(s)) bad.push("填充題答案要是非空字串陣列（可接受的寫法都列上）");
+    }
+    return bad;
+  }
+
+  // 填充題比對：去空白、全形英數轉半形、統一標點
+  function norm(x) {
+    return String(x == null ? "" : x)
+      .replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
+      .replace(/　/g, " ").replace(/\s+/g, "").replace(/[。．.]$/, "").toLowerCase();
+  }
+  function isRight(it, ans) {
+    if (it.type === "choice") return ans === it.a;
+    if (it.type === "tf") return ans === it.a;
+    var n = norm(ans);
+    return n !== "" && it.a.some(function (a) { return norm(a) === n; });
+  }
+  function answerText(it) {
+    if (it.type === "choice") return it.opts[it.a];
+    if (it.type === "tf") return it.a ? "對（○）" : "錯（×）";
+    return it.a[0];
+  }
+
+  // hidden：爸媽按「不用再練」的題（2026-10-13 律師：「為何我測試用的題目，我沒法清除？有無清除或重置按鈕？」）——
+  //   只藏起來不刪，清單底下可以恢復；題目本身寫在題庫程式裡，各台裝置都一樣，所以藏的是「這個家不練它」。
+  // 存檔格式 v2（Codex 設計者方案 b，docs/storage-design-b-codex-designer-20261013.md）：
+  //   {v:2, it:{題id: 作答紀錄}, hidden:{題id: true}, settings:{sound, tone}}。
+  //   同一時間只有一個分頁能寫（Web Locks，見下方 createController），所以不再需要修改時間 t、清除標記 resetAt 與逐題合併：
+  //   寫入＝把主頁記憶體整份存進去；舊版 v1 的 t／resetAt 只在遷移時用一次。
+  var V = 2, KEY = "g5wrong.v1", LOCK = "g5wrong.v1:writer";
+  function blank() { return { v: V, it: {}, hidden: {}, settings: { sound: true, tone: 0 } }; }
+  function copy(x) { return JSON.parse(JSON.stringify(x)); }
+  function isHidden(state, id) { return !!(state && state.hidden && state.hidden[id] === true); }
+  function visible(items, state) { return items.filter(function (it) { return !isHidden(state, it.id); }); }
+  function setHidden(state, id, on) {
+    var st = copy(state);
+    st.hidden = st.hidden || {};
+    if (on) st.hidden[id] = true; else delete st.hidden[id];
+    return st;
+  }
+  // 清除全部作答紀錄：進度歸零，保留提示音設定與「不用再練」名單（那是爸媽的選擇，不是作答紀錄）
+  function resetProgress(state) {
+    var st = blank();
+    st.settings = copy(state.settings); st.hidden = copy(state.hidden || {});
+    return st;
+  }
+  var ID = /^[\w-]{1,60}$/;
+  function isObj(x) { return !!x && typeof x === "object" && !Array.isArray(x); }
+  function isNat(x) { return Number.isInteger(x) && x >= 0; }
+  // __proto__ 寫進物件會變成改原型、不是存資料 ⇒ 不當成合法的題目代號
+  function okId(id) { return ID.test(id) && id !== "__proto__"; }
+  var ENTRY_KEYS = ["n", "ok", "bad", "s", "m", "last", "due", "log"];
+  // 一筆作答紀錄是否正是寫入程式寫得出來的樣子（嚴格檢查，不修正；用於 decode 判斷壞檔）
+  function entryOk(e, ver) {
+    if (!isObj(e)) return false;
+    if (!Object.keys(e).every(function (k) { return ENTRY_KEYS.indexOf(k) >= 0 || (ver === 1 && k === "t"); })) return false;
+    if (!ENTRY_KEYS.every(function (k) { return Object.prototype.hasOwnProperty.call(e, k); })) return false;
+    if (!isNat(e.n) || !isNat(e.ok) || !isNat(e.bad) || !(isNat(e.s) && e.s <= MASTER) || typeof e.m !== "boolean") return false;
+    if (!(e.last === "" || isDay(e.last)) || !(e.due === "" || isDay(e.due))) return false;
+    if (ver === 1 && e.t !== undefined && !isNat(e.t)) return false;
+    return Array.isArray(e.log) && e.log.length <= LOG_MAX &&
+      e.log.every(function (l) { return Array.isArray(l) && l.length === 2 && isDay(l[0]) && (l[1] === 0 || l[1] === 1); });
+  }
+  function settingsOk(s) {
+    return isObj(s) && Object.keys(s).every(function (k) { return k === "sound" || k === "tone"; }) &&
+      typeof s.sound === "boolean" && Number.isInteger(s.tone) && s.tone >= 0 && s.tone < 10;
+  }
+  // 一筆作答紀錄的欄位整理：壞掉的欄位丟掉（設成預設值），不讓一筆壞資料弄壞整頁
+  function cleanEntry(e) {
+    var n = function (x) { return Number.isInteger(x) && x >= 0 ? x : 0; };
+    return {
+      n: n(e.n), ok: n(e.ok), bad: n(e.bad), s: Math.min(n(e.s), MASTER), m: e.m === true,
+      last: isDay(e.last) ? e.last : "", due: isDay(e.due) ? e.due : "",
+      log: Array.isArray(e.log) ? e.log.filter(function (l) { return Array.isArray(l) && isDay(l[0]) && (l[1] === 0 || l[1] === 1); }).slice(-LOG_MAX) : []
+    };
+  }
+  function cleanSettings(raw) {
+    var st = { sound: true, tone: 0 };
+    if (isObj(raw)) {
+      st.sound = raw.sound !== false;
+      st.tone = Number.isInteger(raw.tone) && raw.tone >= 0 && raw.tone < 10 ? raw.tone : 0;
+    }
+    return st;
+  }
+  // 讀存檔（原始字串或 null）。回傳 {ok:true, from:null|1|2, st} 或 {ok:false}。
+  //   null＝真的沒有存檔（新裝置）；from:1＝舊版，呼叫端要先把 st 寫成 v2 成功才能開放作答；
+  //   壞 JSON、容器型別不對、未知版本 ⇒ ok:false，絕不當成空白（否則下一次存檔就把原本的紀錄蓋掉）。
+  function decode(raw) {
+    if (raw === null || raw === undefined) return { ok: true, from: null, st: blank() };
+    var o;
+    try { o = JSON.parse(raw); } catch (e) { return { ok: false }; }
+    if (!isObj(o) || (o.v !== 1 && o.v !== 2)) return { ok: false };
+    if ((o.it !== undefined && !isObj(o.it)) || (o.hidden !== undefined && !isObj(o.hidden)) || (o.settings !== undefined && !isObj(o.settings))) return { ok: false };
+    var st = blank(), src = o.it || {}, hid = o.hidden || {};
+    // 只接受歷代寫入程式實際寫出過的格式；任何一處讀不懂都整份當壞檔，讀檔時不「修正」任何欄位——
+    // 修正後下一次存檔就把原文蓋掉（Codex 審 1ed44f8 F4：it.a=[] 被略過；449939b F4b：n:[3] 被改成 0）。
+    // 歷代格式：151f6f0（v1，沒有 hidden）、cd31059／cf61e0f（v1，hidden＝true）、1784419（v1，加 resetAt 與每題 t，hidden＝非 0 的 ±時間戳）、
+    // 現行 v2（沒有 t、沒有 resetAt，hidden＝true）。每題固定 8 欄：n／ok／bad／s／m／last／due／log。
+    var TOP = o.v === 1 ? ["v", "it", "hidden", "settings", "resetAt"] : ["v", "it", "hidden", "settings"];
+    if (!Object.keys(o).every(function (k) { return TOP.indexOf(k) >= 0; })) return { ok: false };
+    if (o.v === 1 && o.resetAt !== undefined && !isNat(o.resetAt)) return { ok: false };
+    var recOk = Object.keys(src).every(function (id) { return okId(id) && entryOk(src[id], o.v); });
+    var hidOk = Object.keys(hid).every(function (id) {
+      var x = hid[id];
+      return okId(id) && (x === true || (o.v === 1 && typeof x === "number" && Number.isFinite(x) && x !== 0));
+    });
+    if (!recOk || !hidOk || (o.settings !== undefined && !settingsOk(o.settings))) return { ok: false };
+    st.settings = cleanSettings(o.settings);
+    if (o.v === 2) {
+      Object.keys(hid).forEach(function (id) { st.hidden[id] = true; });
+      Object.keys(src).forEach(function (id) { st.it[id] = cleanEntry(src[id]); });
+      return { ok: true, from: 2, st: st };
+    }
+    // v1 遷移（設計書第 7 條）：hidden 為 true 或正數＝隱藏、負數＝已恢復；作答紀錄依舊判準 t >= resetAt 整理一次（缺少視為 0）。
+    // 相等時間曾造成的清除歧義無法追溯推定，保留資料（讓家長重新清除）。
+    var num = function (x) { return typeof x === "number" && Number.isFinite(x) ? x : 0; }, resetAt = num(o.resetAt);
+    Object.keys(hid).forEach(function (id) { var x = hid[id]; if (x === true || x > 0) st.hidden[id] = true; });
+    Object.keys(src).forEach(function (id) { var e = src[id]; if (num(e.t) >= resetAt) st.it[id] = cleanEntry(e); });
+    return { ok: true, from: 1, st: st };
+  }
+
+  // 記一次作答。回傳新的 state（不改舊的），以及這次有沒有算進進度（counted）。
+  function record(state, id, right, today) {
+    var st = copy(state), e = st.it[id] || { n: 0, ok: 0, bad: 0, s: 0, m: false, last: "", due: "", log: [] };
+    e.n += 1; if (right) e.ok += 1; else e.bad += 1;
+    e.log.push([today, right ? 1 : 0]); if (e.log.length > LOG_MAX) e.log = e.log.slice(-LOG_MAX);
+    var counted = e.last !== today;
+    if (counted) {
+      e.last = today;
+      if (right) {
+        e.s = Math.min(e.s + 1, MASTER);
+        e.m = e.s >= MASTER;
+        e.due = addDays(today, e.m ? KEEP : GAP[e.s]);
+      } else {
+        e.s = 0; e.m = false; e.due = addDays(today, 1);
+      }
+    } else if (!right && e.m) {
+      // 學會的題目同一天又做錯：取消「學會」，明天再出（寧可多練一次）——進度確實變了，所以算進度（Codex 審 151f6f09：原本回報「不影響進度」與實際不符）
+      e.m = false; e.s = 0; e.due = addDays(today, 1); counted = true;
+    }
+    st.it[id] = e;
+    return { state: st, counted: counted };
+  }
+
+  function entry(state, id) { return state.it[id] || null; }
+  function isDue(state, it, today) { var e = entry(state, it.id); return !e || !e.due || e.due <= today; }
+  // 今天該複習的：從沒做過的、到期的。排序：錯最多次 → 從沒做過 → 加入日期早的
+  function dueList(items, state, today) {
+    return items.filter(function (it) { return isDue(state, it, today); }).sort(function (a, b) {
+      var ea = entry(state, a.id), eb = entry(state, b.id);
+      var wa = ea ? ea.bad : 0, wb = eb ? eb.bad : 0;
+      if (wa !== wb) return wb - wa;
+      if (!!ea !== !!eb) return ea ? 1 : -1;
+      return a.added < b.added ? -1 : a.added > b.added ? 1 : (a.id < b.id ? -1 : 1);
+    });
+  }
+  // 考前總複習：該科（subject 空＝全部）每一題，沒學會的在前，同一組內照加入日期
+  function examList(items, state, subject) {
+    return items.filter(function (it) { return !subject || it.subject === subject; }).sort(function (a, b) {
+      var ma = !!(entry(state, a.id) || {}).m, mb = !!(entry(state, b.id) || {}).m;
+      if (ma !== mb) return ma ? 1 : -1;
+      return a.added < b.added ? -1 : a.added > b.added ? 1 : (a.id < b.id ? -1 : 1);
+    });
+  }
+  // 每科統計：共幾題、學會幾題、今天到期幾題
+  function stats(items, state, today) {
+    var out = {};
+    items.forEach(function (it) {
+      var o = out[it.subject] || (out[it.subject] = { total: 0, mastered: 0, due: 0 });
+      o.total += 1;
+      if ((entry(state, it.id) || {}).m) o.mastered += 1;
+      if (isDue(state, it, today)) o.due += 1;
+    });
+    return out;
+  }
+  function status(state, it, today) {
+    var e = entry(state, it.id);
+    if (!e || !e.n) return { key: "new", text: "還沒練過" };
+    if (e.m) return { key: "done", text: "學會了（連 " + MASTER + " 天都對）" };
+    if (e.due && e.due > today) return { key: "wait", text: "連對 " + e.s + " 天，" + e.due.slice(5).replace("-", "/") + " 再練" };
+    return { key: "due", text: e.s ? "連對 " + e.s + " 天，今天要練" : "今天要練" };
+  }
+
+  // ===== 單一寫入分頁（Codex 設計者方案 b 的七條契約；node 測試 tests/storage.test.js 用替身驅動同一份程式）=====
+  // ①取鎖且讀取成功（READY）才接受修改；其他分頁唯讀，每個操作入口都再檢查一次寫入資格。BroadcastChannel 只用來「請對方讓出」，不選主、不轉送答案。
+  // ②接手一定重新讀存檔；主頁只在「首頁、沒有未存進度」時讓出；不以逾時搶鎖；沒有 Web Locks 就停用修改。
+  // ③載入後主頁記憶體是唯一工作狀態：save() 直接把記憶體整份寫進去，不重讀、不合併。
+  // ④寫入失敗：記憶體照留、標 DIRTY、單一重試計時器（每次寫當下完整 state，不重播答案）＋手動重試。
+  // ⑤清除用候選狀態，寫成功才採用並結束複習；失敗什麼都不變。
+  // ⑥每個畫面操作帶 token {gen, qid}：寫入資格、READY、世代、題目都對才接受；答案接受一次就消耗。
+  // ⑦v1→v2 遷移寫成功才 READY；壞格式、未知版本不當空白、不寫。
+  // env：storage（getItem/setItem）、locks（navigator.locks 或 null）、items、now()、setTimeout/clearTimeout、post(訊息給別的分頁)、onChange()、onWriter(是否可寫)
+  var RETRY_MS = 3000;
+  var MSG = {
+    ro: "另一個分頁正在練習，請回那一頁。",
+    nolock: "這個瀏覽器無法安全儲存練習紀錄（太舊或被限制），先不能練習；請更新 iPad／瀏覽器後再開。",
+    lockfail: "這一頁拿不到存檔的權限（瀏覽器拒絕），無法安全儲存，先不能練習；請重新整理或換瀏覽器。",
+    readfail: "讀不到原本紀錄，請再讀一次（原本的紀錄沒有動）。",
+    badfile: "這台裝置上的錯題紀錄讀不懂（格式不對），為了不蓋掉原本的紀錄，先不能練習。請找爸媽處理。",
+    migratefail: "舊版紀錄要換成新格式，但這台裝置現在存不進去；原本的紀錄沒有動，請再讀一次。",
+    notready: "還沒讀到原本的紀錄，請先按「再讀一次」。",
+    resetFail: "沒有清除成功：這台裝置現在存不了資料，紀錄維持原樣。",
+    resetOk: "已清除全部作答紀錄。"
+  };
+  function createController(env) {
+    var storage = env.storage || null, locks = env.locks || null, items = env.items || [];
+    var now = env.now || function () { return Date.now(); };
+    var setT = env.setTimeout || function (f, ms) { return setTimeout(f, ms); };
+    var clrT = env.clearTimeout || function (i) { clearTimeout(i); };
+    var post = env.post || function () {}, onChange = env.onChange || function () {}, onWriter = env.onWriter || function () {};
+    var S = { mode: "BOOT", writer: false, ready: false, dirty: false, touched: false, st: blank(), sess: null, gen: 0, retry: null, release: null, waiting: false };
+    var byId = {}; items.forEach(function (it) { byId[it.id] = it; });
+
+    function emit() { try { onChange(); } catch (e) {} }
+    function no(reason) {
+      var m = reason === "ro" ? MSG.ro : reason === "nolock" ? (S.mode === "LOCKFAIL" ? MSG.lockfail : MSG.nolock) : reason === "notready" ? MSG.notready : "";
+      return { ok: false, reason: reason, msg: m };
+    }
+    // 寫入資格（每個修改入口都先過這裡）
+    function gate(tok) {
+      if (!S.writer) return no(S.mode === "NOLOCK" || S.mode === "LOCKFAIL" ? "nolock" : "ro");
+      if (!S.ready) return no("notready");
+      if (!tok || tok.gen !== S.gen) return no("stale");
+      return null;
+    }
+    function curId() { var s = S.sess; return s && s.i < s.queue.length ? s.queue[s.i] : null; }
+    function skipHidden() {
+      var s = S.sess; if (!s || s.answered) return;
+      while (s.i < s.queue.length && (isHidden(S.st, s.queue[s.i]) || !byId[s.queue[s.i]])) s.i++;
+    }
+    function arm() {
+      if (S.retry !== null) return;
+      S.retry = setT(function () { S.retry = null; if (S.dirty && S.writer && S.ready) { save(); emit(); } }, RETRY_MS);
+    }
+    function disarm() { if (S.retry !== null) { clrT(S.retry); S.retry = null; } }
+    function save() {
+      if (!S.writer || !S.ready) return false;
+      try { storage.setItem(KEY, JSON.stringify(S.st)); }
+      catch (e) { S.dirty = true; arm(); return false; }
+      S.dirty = false; disarm(); return true;
+    }
+    // 讀存檔（只在取得寫入資格時、按「再讀一次」時）：成功才 READY
+    function load() {
+      S.ready = false; S.dirty = false; disarm();
+      var raw;
+      try { if (!storage) throw new Error("no storage"); raw = storage.getItem(KEY); } catch (e) { S.mode = "READFAIL"; return; }
+      var d = decode(raw);
+      if (!d.ok) { S.mode = "BADFILE"; S.st = blank(); return; }
+      if (d.from === 1) {
+        try { storage.setItem(KEY, JSON.stringify(d.st)); } catch (e) { S.mode = "MIGRATEFAIL"; return; }
+      }
+      S.st = d.st; S.ready = true; S.mode = "READY";
+    }
+    // 唯讀分頁：只為了顯示讀一下（不寫、不當工作狀態；接手時一定重讀）
+    function loadView() {
+      try { var d = storage ? decode(storage.getItem(KEY)) : { ok: false }; S.st = d.ok ? d.st : blank(); } catch (e) { S.st = blank(); }
+    }
+    function hold() {
+      S.writer = true; S.waiting = false; S.sess = null; S.touched = false; S.gen++;
+      load();
+      emit(); try { onWriter(true); } catch (e) {}
+      return new Promise(function (res) { S.release = res; });
+    }
+    function waitLock() {
+      if (S.waiting) return;
+      S.waiting = true;
+      try { locks.request(LOCK, function () { return hold(); }).catch(function () { S.waiting = false; }); } catch (e) { S.waiting = false; }
+    }
+    function lockFail() { S.writer = false; S.ready = false; S.mode = "LOCKFAIL"; loadView(); emit(); }
+    function boot() {
+      if (!locks || typeof locks.request !== "function") { S.mode = "NOLOCK"; loadView(); emit(); return; }
+      try {
+        locks.request(LOCK, { ifAvailable: true }, function (lock) {
+          if (!lock) { S.mode = "RO"; loadView(); emit(); waitLock(); return; }
+          return hold();
+        }).catch(lockFail);
+      } catch (e) { lockFail(); }
+    }
+    // 主頁讓出：只在首頁、沒有未存進度時（練習中、DIRTY 都不讓）
+    function yieldLock() {
+      if (!S.writer || S.sess || S.dirty) return false;
+      var r = S.release;
+      S.writer = false; S.ready = false; S.mode = "RO"; S.release = null; S.gen++; disarm();
+      try { onWriter(false); } catch (e) {}
+      loadView(); emit();
+      if (r) r();
+      waitLock();
+      return true;
+    }
+    function message(m) {
+      if (m === "want") { if (S.writer && !yieldLock()) post("busy"); }
+      else if (m === "busy" && !S.writer) { S.busy = true; emit(); }
+    }
+    function askTakeover() { if (S.writer || !locks) return false; S.busy = false; post("want"); return true; }
+    function refreshView() { if (!S.writer) { loadView(); emit(); } }
+
+    function token() { return { gen: S.gen, qid: curId() }; }
+    function start(tok, list, label) {
+      var g = gate(tok); if (g) return g;
+      if (!list.length) return { ok: false, reason: "empty", msg: "" };
+      S.sess = { label: label, queue: list.map(function (it) { return it.id; }), i: 0, right: 0, wrong: 0, requeued: {}, answered: false, last: null, mastered: 0 };
+      skipHidden(); S.gen++; emit();
+      return { ok: true };
+    }
+    function startToday(tok) { return start(tok, dueList(visible(items, S.st), S.st, dayKey(now())), "今天的複習"); }
+    function startExam(tok, subject) { return start(tok, examList(visible(items, S.st), S.st, subject), (subject || "全部科目") + "考前總複習"); }
+    function answer(tok, val) {
+      var g = gate(tok); if (g) return g;
+      var s = S.sess, id = curId();
+      if (!s || !id || tok.qid !== id) return no("stale");
+      if (s.answered) return no("answered");
+      if (isHidden(S.st, id) || !byId[id]) return no("hidden");
+      var it = byId[id], ok = isRight(it, val), wasM = !!(S.st.it[id] || {}).m;
+      var r = record(S.st, id, ok, dayKey(now()));
+      S.st = r.state; S.touched = true;
+      s.answered = true; s.last = { val: val, ok: ok, counted: r.counted };
+      if (ok) { s.right++; if (!wasM && S.st.it[id].m) s.mastered++; }
+      else { s.wrong++; if (!s.requeued[id]) { s.requeued[id] = 1; s.queue.push(id); } }
+      S.gen++;
+      var saved = save();
+      emit();
+      return { ok: true, right: ok, counted: r.counted, saved: saved, chime: ok && S.st.settings.sound !== false };
+    }
+    function next(tok) {
+      var g = gate(tok); if (g) return g;
+      var s = S.sess; if (!s || !s.answered || tok.qid !== curId()) return no("stale");
+      s.i++; s.answered = false; s.last = null; skipHidden(); S.gen++; emit();
+      return { ok: true };
+    }
+    function home(tok) {
+      var g = gate(tok); if (g) return g;
+      S.sess = null; S.gen++; emit();
+      return { ok: true };
+    }
+    function setHiddenOp(tok, id, on) {
+      var g = gate(tok); if (g) return g;
+      if (!ID.test(String(id))) return no("stale");
+      S.st = setHidden(S.st, id, !!on); S.touched = true;
+      skipHidden(); S.gen++;
+      var saved = save(); emit();
+      return { ok: true, saved: saved };
+    }
+    function setSound(tok, sound, tone) {
+      var g = gate(tok); if (g) return g;
+      var t = Number.isInteger(tone) && tone >= 0 && tone < 10 ? tone : S.st.settings.tone;
+      S.st = copy(S.st); S.st.settings = { sound: !!sound, tone: t }; S.touched = true;
+      var saved = save(); emit();
+      return { ok: true, saved: saved };
+    }
+    function reset(tok) {
+      var g = gate(tok); if (g) return g;
+      var cand = resetProgress(S.st);
+      try { storage.setItem(KEY, JSON.stringify(cand)); }
+      catch (e) { emit(); return { ok: false, reason: "save", msg: MSG.resetFail }; }
+      S.st = cand; S.dirty = false; disarm(); S.sess = null; S.touched = true; S.gen++; emit();
+      return { ok: true, msg: MSG.resetOk };
+    }
+    function retrySave() {
+      if (!S.writer || !S.ready || !S.dirty) return false;
+      var ok = save(); emit(); return ok;
+    }
+    function reread() {
+      if (!S.writer) return no(S.mode === "NOLOCK" || S.mode === "LOCKFAIL" ? "nolock" : "ro");
+      if (S.ready) return { ok: false, reason: "ready", msg: "" };   // 已經讀成功：舊的「再讀一次」重播不能把記憶體換回磁碟版
+      load(); S.sess = null; S.gen++; emit();
+      return S.ready ? { ok: true } : { ok: false, reason: "notready", msg: viewMsg() };
+    }
+    // 同步（g5-help/sync.js 的 canReplace／accept）：只有主頁、首頁、沒有未存進度、本頁載入後還沒有自己的修改時，才接受雲端整份換上。
+    // 寫進主 key 成功才採用；只接受合法 v2（壞的、舊版 v1 都不接，等那台更新後上傳 v2）。
+    function canReplace(key) { return key === KEY && S.writer && S.ready && !S.sess && !S.dirty && !S.touched; }
+    function accept(key, raw) {
+      if (!canReplace(key) || typeof raw !== "string") return false;
+      var d = decode(raw); if (!d.ok || d.from !== 2) return false;
+      try { storage.setItem(KEY, raw); } catch (e) { return false; }
+      S.st = d.st; S.gen++; emit();
+      var back; try { back = storage.getItem(KEY); } catch (e) { back = null; }
+      return back === raw;
+    }
+    function viewMsg() {
+      return { RO: MSG.ro, NOLOCK: MSG.nolock, LOCKFAIL: MSG.lockfail, READFAIL: MSG.readfail, BADFILE: MSG.badfile, MIGRATEFAIL: MSG.migratefail }[S.mode] || "";
+    }
+    function view() {
+      return { mode: S.mode, writer: S.writer, ready: S.ready, dirty: S.dirty, busy: !!S.busy, gen: S.gen, msg: viewMsg(),
+        st: copy(S.st), sess: S.sess ? copy(S.sess) : null };
+    }
+    return {
+      boot: boot, view: view, token: token, startToday: startToday, startExam: startExam, answer: answer, next: next, home: home,
+      setHidden: setHiddenOp, setSound: setSound, reset: reset, retrySave: retrySave, reread: reread,
+      askTakeover: askTakeover, message: message, yieldLock: yieldLock, refreshView: refreshView, canReplace: canReplace, accept: accept,
+      mode: function () { return S.mode; }
+    };
+  }
+
+  var api = {
+    SUBJECTS: SUBJECTS, TYPES: TYPES, MASTER: MASTER, GAP: GAP, KEEP: KEEP, LOG_MAX: LOG_MAX,
+    dayKey: dayKey, addDays: addDays, isDay: isDay, itemProblems: itemProblems, norm: norm, isRight: isRight, answerText: answerText,
+    KEY: KEY, LOCK: LOCK, V: V, MSG: MSG, RETRY_MS: RETRY_MS,
+    blank: blank, decode: decode, visible: visible, isHidden: isHidden, setHidden: setHidden, resetProgress: resetProgress, record: record, createController: createController, dueList: dueList, examList: examList, stats: stats, status: status
+  };
+  if (typeof module !== "undefined" && module.exports) module.exports = api; else root.G5WrongCore = api;
+})(typeof window !== "undefined" ? window : this);
+
+</script>
+<script>
+(function(){
+"use strict";
+var C = window.G5WrongCore, KEY = C.KEY, EXAM = "2026-11-05";
+// e2e 測試用：測試在頁面載入前放 window.G5WrongTestItems，正式網頁不會有這個變數
+var RAW = Array.isArray(window.G5WrongTestItems) ? window.G5WrongTestItems : window.G5WrongBank.ITEMS;
+var $ = function(s){ return document.querySelector(s); };
+function esc(x){ return String(x == null ? "" : x).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+var badItems = [], ITEMS = RAW.filter(function(it){ var p = C.itemProblems(it); if (p.length) badItems.push((it && it.id) + "：" + p.join("、")); return !p.length; });
+var ids = {}; ITEMS = ITEMS.filter(function(it){ if (ids[it.id]) { badItems.push(it.id + "：id 重複"); return false; } ids[it.id] = 1; return true; });
+function today(){ return C.dayKey(Date.now()); }
+
+// 存檔（Codex 設計者方案 b，docs/storage-design-b-codex-designer-20261013.md；邏輯全在 src/core.js 的 createController）：
+// 同一時間只有一個分頁能練習與寫入（Web Locks「g5wrong.v1:writer」）；其他分頁唯讀，按任何會改紀錄的按鈕都只說「另一個分頁正在練習，請回那一頁」。
+// 主頁記憶體是唯一工作狀態，存檔＝整份寫進去；存不進去就留在記憶體、警告＋自動與手動重試。這頁只負責畫面。
+var chan = null; try { chan = new BroadcastChannel(C.LOCK); } catch (e) {}
+var store = null; try { store = window.localStorage; } catch (e) {}
+var subs = [], FLASH = "";
+var ctl = C.createController({
+  storage: store, locks: (navigator.locks && typeof navigator.locks.request === "function") ? navigator.locks : null, items: ITEMS,
+  now: function(){ return Date.now(); }, setTimeout: function(f, ms){ return setTimeout(f, ms); }, clearTimeout: function(i){ clearTimeout(i); },
+  post: function(m){ if (chan) try { chan.postMessage(m); } catch (e) {} },
+  onChange: function(){ render(); subs.forEach(function(f){ try { f(); } catch (e) {} }); }
+});
+if (chan) chan.onmessage = function(e){ ctl.message(e.data); };
+// 唯讀分頁：別頁存了就更新畫面上的數字（只顯示；接手時一定重讀，不沿用這份）
+window.addEventListener("storage", function(e){ if (e.key === KEY || e.key === null) ctl.refreshView(); });
+// 回到這個分頁（例如從別的分頁切回來）：請正在寫的那頁讓出；那頁在首頁且已存好才會讓
+document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "visible") ctl.askTakeover(); });
+
+function refuse(r){ if (r && r.msg) { FLASH = r.msg; banner(ctl.view()); } }
+
+var actx = null;
+function chime(i){
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); window.G5Tones.play(actx, i); } catch (e) {}
+}
+
+function banner(v){
+  var h = "";
+  if (v.mode === "RO") h += '<div class="banner" id="roBanner">' + esc(v.msg) + (v.busy ? "那一頁正在練習或還沒存好，請在那一頁練完、回首頁後再按一次。" : "") +
+    ' <button class="btn ghost sm" type="button" id="takeBtn">改在這一頁練習</button></div>';
+  else if (v.mode === "NOLOCK" || v.mode === "LOCKFAIL") h += '<div class="banner">' + esc(v.msg) + '</div>';
+  if (v.dirty) h += '<div class="banner" id="saveWarn" role="alert">還沒存好，請先不要關閉這頁（可能是私密瀏覽或空間滿了，會自動再試）。 <button class="btn ghost sm" type="button" id="saveRetry">現在再存一次</button></div>';
+  if (FLASH && v.mode !== "READY") h += '<div class="banner" id="actMsg" role="alert">' + esc(FLASH) + '</div>';
+  if (badItems.length) h += '<div class="banner">有 ' + badItems.length + ' 題資料有問題先不出：' + esc(badItems.join("；")) + '</div>';
+  $("#banners").innerHTML = h;
+  var tb = $("#takeBtn"); if (tb) tb.onclick = function(){ ctl.askTakeover(); FLASH = ""; tb.disabled = true; tb.textContent = "已請那一頁讓出…"; };
+  var sr = $("#saveRetry"); if (sr) sr.onclick = function(){ ctl.retrySave(); };
+}
+
+function VIS(st){ return C.visible(ITEMS, st); }
+function renderHome(st){
+  var V = VIS(st);
+  if (ITEMS.length && !V.length) return '<div class="empty"><span class="sect-t">錯題都設成「不用再練」了</span><p style="margin:0">共 ' + ITEMS.length + ' 題，可以在下面「全部錯題清單」恢復。</p></div>';
+  return homeFor(V, st);
+}
+function homeFor(ITEMS, st){   // 參數 ITEMS＝沒被隱藏的題（刻意與外層同名：下面的首頁只看得到這些）
+  var t = today(), due = C.dueList(ITEMS, st, t), S = C.stats(ITEMS, st, t), m = 0;
+  Object.keys(S).forEach(function(k){ m += S[k].mastered; });
+  if (!ITEMS.length) {
+    return '<div class="empty"><span class="sect-t">還沒有錯題</span><p style="margin:0">學校小考做錯的題目，會一題一題放在這裡，每天練一點，練到連續三天都答對就算學會。</p>' +
+      '<ol><li>爸媽打開下面「爸媽：上傳錯題」，選科目、拍照送出。</li><li>電腦會把題目重新打字、查好答案和解說。</li><li>做好後就會出現在這裡，也會出現在「全部錯題清單」。</li></ol></div>';
+  }
+  var subs = C.SUBJECTS.filter(function(s){ return S[s]; });
+  return '<div class="today"><div class="big"><b id="dueN">' + due.length + '</b><span class="small muted">題今天要練</span></div>' +
+    '<div style="display:grid;gap:10px"><span>' + (due.length ? "先把今天到期的錯題練完，答錯的會在最後再出一次。" : "今天的錯題都練完了！想多練可以用下面的考前總複習。") + '</span>' +
+    '<div class="row"><button class="btn" id="goToday" type="button"' + (due.length ? "" : " disabled") + '>' + (due.length ? "開始今天的複習" : "今天練完了") + '</button></div></div></div>' +
+    '<div class="three"><div><b>' + ITEMS.length + '</b><span class="small muted">全部錯題</span></div><div><b>' + m + '</b><span class="small muted">已經學會</span></div><div><b>' + (ITEMS.length - m) + '</b><span class="small muted">還在練</span></div></div>' +
+    '<span class="sect-t">考前總複習（不管排程，每一題都出）</span><div class="subs">' +
+    '<button class="sub all" type="button" data-sub=""><b>全部科目</b><span>' + ITEMS.length + ' 題・學會 ' + m + ' 題</span></button>' +
+    subs.map(function(s){ return '<button class="sub" type="button" data-sub="' + esc(s) + '"><b>' + esc(s) + '</b><span>' + S[s].total + ' 題・學會 ' + S[s].mastered + ' 題</span></button>'; }).join("") + '</div>';
+}
+function byId(id){ for (var i = 0; i < ITEMS.length; i++) if (ITEMS[i].id === id) return ITEMS[i]; return null; }
+function renderQuestion(sess){
+  var it = byId(sess.queue[sess.i]), n = sess.queue.length, L = sess.last, h = "";
+  h += '<div class="qhead"><span>' + esc(sess.label) + '・第 ' + (sess.i + 1) + ' / ' + n + ' 題</span><button class="btn ghost sm" id="quit" type="button">回首頁</button></div>';
+  h += '<div class="bar"><i style="width:' + Math.round(sess.i / n * 100) + '%"></i></div>';
+  h += '<div><span class="tag">' + esc(it.subject) + '</span> <span class="small muted">' + esc(it.source) + '</span>' + (sess.requeued[it.id] && sess.queue.indexOf(it.id) < sess.i ? ' <span class="small muted">（剛才錯的，再練一次）</span>' : "") + '</div>';
+  h += '<div class="q" id="qText">' + esc(it.q) + '</div>';
+  var dis = sess.answered ? " disabled" : "";
+  if (it.type === "choice" || it.type === "tf") {
+    var opts = it.type === "tf" ? [[true, "○ 對"], [false, "× 錯"]] : it.opts.map(function(o, i){ return [i, o]; });
+    h += '<div class="opts">' + opts.map(function(o, k){
+      var cls = "opt";
+      if (L) { if (o[0] === it.a) cls += " right"; else if (o[0] === L.val) cls += " wrong"; }
+      return '<button class="' + cls + '" type="button" data-k="' + k + '"' + dis + '>' + esc(o[1]) + '</button>';
+    }).join("") + '</div>';
+  } else {
+    h += '<div class="fill"><input id="fillIn" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="寫答案"' + (L ? ' value="' + esc(L.val) + '"' : "") + dis + '><button class="btn" id="fillGo" type="button"' + dis + '>送出</button></div>';
+  }
+  if (L) {
+    h += '<div class="fb ' + (L.ok ? "ok" : "no") + '" id="fb"><b>' + (L.ok ? "答對了！" : "再看一次：正確答案是「" + esc(C.answerText(it)) + "」") + '</b>' +
+      (it.her ? '<div class="her">小考時寫的是：' + esc(it.her) + '</div>' : "") +
+      '<p>' + esc(it.why) + '</p>' +
+      (L.counted ? "" : '<span class="small muted">今天已經練過這題，這次只算練習，不影響進度。</span>') + '</div>';
+    h += '<div class="row"><button class="btn" id="nextBtn" type="button">' + (sess.i + 1 < n ? "下一題" : "看今天的成果") + '</button></div>';
+  }
+  return h;
+}
+function renderDone(sess){
+  return '<div class="done"><b class="t">練完了！</b><span>' + esc(sess.label) + '：答對 ' + sess.right + ' 次、答錯 ' + sess.wrong + ' 次' + (sess.mastered ? '，新學會 ' + sess.mastered + ' 題' : "") + '。</span>' +
+    '<span class="small muted">答錯的題目明天會再出；連續三天都答對就算學會。</span><button class="btn" id="homeBtn" type="button">回首頁</button></div>';
+}
+function renderList(st){
+  if (!ITEMS.length) return '<span class="muted">還沒有錯題。</span>';
+  var t = today(), V = VIS(st), H = ITEMS.filter(function(it){ return C.isHidden(st, it.id); });
+  var short = function(it){ return esc(it.q.length > 40 ? it.q.slice(0, 40) + "…" : it.q); };
+  var h = C.SUBJECTS.filter(function(s){ return V.some(function(it){ return it.subject === s; }); }).map(function(s){
+    return '<div style="display:grid;gap:6px"><h3>' + esc(s) + '</h3>' + V.filter(function(it){ return it.subject === s; }).map(function(it){
+      var ss = C.status(st, it, t);
+      return '<div class="li"><b>' + short(it) + '</b><span>' + esc(it.source) + '・<span class="st-' + ss.key + '">' + esc(ss.text) + '</span></span>' +
+        '<div><button class="btn ghost sm" type="button" data-hide="' + esc(it.id) + '">不用再練（藏起來）</button></div></div>';
+    }).join("") + '</div>';
+  }).join("");
+  if (H.length) h += '<details id="hiddenBox"><summary style="font-size:17px">已設成不用再練的 ' + H.length + ' 題（可恢復）</summary>' + H.map(function(it){
+    return '<div class="li"><b>' + short(it) + '</b><span>' + esc(it.subject) + '・' + esc(it.source) + '</span><div><button class="btn ghost sm" type="button" data-unhide="' + esc(it.id) + '">恢復，繼續練</button></div></div>';
+  }).join("") + '</details>';
+  return h || '<span class="muted">錯題都設成不用再練了。</span>';
+}
+var MAINKEY = null, MAINQ = null;   // 上一次畫進 #main 的內容（含世代、題目）；正在作答（還沒送出）的題目 id
+function render(){
+  var v = ctl.view(), st = v.st, sess = v.writer ? v.sess : null, tok = ctl.token();
+  var d = Math.round((Date.parse(EXAM + "T00:00:00+08:00") - Date.parse(today() + "T00:00:00+08:00")) / 86400000);
+  $("#days").textContent = d >= 0 ? d : "–";
+  if (v.mode === "READY") FLASH = "";
+  banner(v);
+  var main = $("#main"), html, inQ = false;
+  if (v.mode === "BOOT") html = '<div class="empty"><span class="muted">讀取練習紀錄中…</span></div>';
+  else if (v.writer && !v.ready) html = '<div class="empty"><span class="sect-t">' + esc(v.msg) + '</span>' +
+    (v.mode === "BADFILE" ? "" : '<div class="row"><button class="btn" type="button" id="rereadBtn">再讀一次</button></div>') + '</div>';
+  else if (!sess) html = renderHome(st);
+  else if (sess.i >= sess.queue.length) html = renderDone(sess);
+  else { html = renderQuestion(sess); inQ = true; }
+  // 同一世代、同一題、同樣內容就不重建 #main（Codex 審 1ed44f8 F3）：存檔自動重試、同步狀態這類重繪，
+  // 不會把正在輸入的答案清掉（輸入框整個不動，值、焦點、游標都在）。世代變了才重建並重新綁定，舊 handler 隨舊節點作廢；
+  // 重建前後若是同一題、都還沒送出（例如練習中爸媽藏了別的題），把輸入中的答案搬到新的輸入框。
+  var key = tok.gen + "|" + tok.qid + "|" + html, rebuilt = key !== MAINKEY;
+  if (rebuilt) {
+    var qNow = inQ && !sess.answered ? tok.qid : null, fi0 = $("#fillIn"), keep = null;
+    if (qNow && qNow === MAINQ && fi0) keep = { v: fi0.value, s: fi0.selectionStart, e: fi0.selectionEnd, f: document.activeElement === fi0 };
+    main.innerHTML = html; MAINKEY = key; MAINQ = qNow;
+    var fi1 = $("#fillIn");
+    if (keep && fi1) { fi1.value = keep.v; if (keep.f) { fi1.focus(); try { fi1.setSelectionRange(keep.s, keep.e); } catch (e) {} } }
+  }
+  var hb0 = $("#hiddenBox"), keepOpen = !!(hb0 && hb0.open);   // 重繪前先記住「已隱藏」清單有沒有展開
+  $("#list").innerHTML = renderList(st);
+  $("#storeMsg").textContent = v.mode !== "READY" ? v.msg : v.dirty ? "進度還沒存好，會自動再試。" : "進度存在這台裝置（開啟跨裝置同步後也會存到家裡的雲端）。";
+  $("#snd").value = st.settings.sound ? String(st.settings.tone) : "off";
+  $("#list").querySelectorAll("[data-hide],[data-unhide]").forEach(function(b){ b.onclick = function(){
+    refuse(ctl.setHidden(tok, b.getAttribute("data-hide") || b.getAttribute("data-unhide"), b.hasAttribute("data-hide")));
+  }; });
+  if (keepOpen && $("#hiddenBox")) $("#hiddenBox").open = true;
+  var rs = $("#resetBtn"), rc = $("#resetSure");
+  rs.onclick = function(){ rc.hidden = false; rs.hidden = true; $("#resetMsg").textContent = "真的要清除嗎？她練過的天數與學會的題目都會歸零（題目本身不會刪）。"; };
+  $("#resetNo").onclick = function(){ rc.hidden = true; rs.hidden = false; $("#resetMsg").textContent = ""; };
+  $("#resetYes").onclick = function(){
+    // 候選狀態寫成功才採用（Codex 設計者契約 5）；失敗或唯讀：什麼都不變、照實說。
+    // token 綁這次畫面（Codex 審 1ed44f8 F2）：舊畫面留下的 handler 不能清掉之後才存好的新答案。
+    var r = ctl.reset(tok);
+    rc.hidden = true; rs.hidden = false;
+    $("#resetMsg").textContent = r.ok ? r.msg : r.reason === "stale" ? "沒有清除：畫面剛更新過，請再按一次。" : (r.msg || "");
+  };
+  $("#snd").onchange = function(e){
+    var val = e.target.value, cur = ctl.view().st.settings;
+    var r = ctl.setSound(tok, val !== "off", val === "off" ? cur.tone : +val);
+    if (!r.ok) { refuse(r); e.target.value = cur.sound ? String(cur.tone) : "off"; return; }
+    if (val !== "off") chime(+val);
+  };
+  if (!rebuilt) return;   // #main 沒重建：上面那些節點與綁定都還是同一世代的，原樣留著
+  var rr = $("#rereadBtn"); if (rr) rr.onclick = function(){ refuse(ctl.reread()); };
+  var go = $("#goToday"); if (go) go.onclick = function(){ refuse(ctl.startToday(tok)); var m = $("#main"); if (m && m.scrollIntoView) m.scrollIntoView({block: "start"}); };
+  main.querySelectorAll(".sub").forEach(function(b){ b.onclick = function(){ refuse(ctl.startExam(tok, b.getAttribute("data-sub"))); var m = $("#main"); if (m && m.scrollIntoView) m.scrollIntoView({block: "start"}); }; });
+  if (sess && sess.i < sess.queue.length) {
+    var it = byId(sess.queue[sess.i]);
+    // 這一題的作答 handler 綁定這次畫面的 token（世代＋題目）：換題、隱藏、清除、讓出後，舊 handler 一律無效
+    var send = function(val){ var r = ctl.answer(tok, val); if (!r.ok) return refuse(r); if (r.chime) chime(ctl.view().st.settings.tone); };
+    main.querySelectorAll(".opt").forEach(function(b){ b.onclick = function(){ var k = +b.getAttribute("data-k"); send(it.type === "tf" ? k === 0 : k); }; });
+    var fi = $("#fillIn"), fg = $("#fillGo");
+    if (fg) { fg.onclick = function(){ if (fi.value.trim()) send(fi.value); else fi.focus(); }; fi.onkeydown = function(e){ if (e.key === "Enter") fg.onclick(); }; }
+    $("#quit").onclick = function(){ refuse(ctl.home(tok)); };
+    var nb = $("#nextBtn"); if (nb) nb.onclick = function(){ refuse(ctl.next(tok)); var b = document.querySelector("#main .opt, #main input, #main .btn"); if (b) b.focus(); };
+  }
+  var hbt = $("#homeBtn"); if (hbt) hbt.onclick = function(){ refuse(ctl.home(tok)); };
+}
+$("#snd").innerHTML = '<option value="off">關閉</option>' + window.G5Tones.TONES.map(function(t, i){ return '<option value="' + i + '">' + (i + 1) + '. ' + esc(t.name) + '</option>'; }).join("");
+$("#sndTry").onclick = function(){ var v = $("#snd").value; chime(v === "off" ? 0 : +v); };
+render();
+ctl.boot();
+window.G5WrongApp = {
+  state: function(){ return ctl.view().st; }, items: function(){ return ITEMS.map(function(it){ return it.id; }); },
+  mode: function(){ return ctl.mode(); }, dirty: function(){ return ctl.view().dirty; },
+  writerReady: function(){ var v = ctl.view(); return v.writer && v.ready; },
+  canReplace: function(key){ return ctl.canReplace(key); }, accept: function(key, data){ return ctl.accept(key, data); },
+  subscribe: function(f){ subs.push(f); }
+};
+})();
+</script>
+<script>
+// 爸媽上傳錯題：與難題站同一條管線（g5-help/gas/inbox.js 的 op:"upload"），補充說明前面加「【錯題】」，電腦取回後就知道要加進錯題本、不是做成難題解說。
+// 家庭碼 g5sync.code：六站同網域（windsorya.github.io）共用同一份 localStorage，任何一站開過同步這裡就能送。
+(function(){
+  var EP = "https://script.google.com/macros/s/AKfycbxwo08VVT5tSRf-DsQEoo1hMlCm1YytGTzj89BPtJ6YWjPieuKyAPbnWXjUKagBdL6l/exec", TAG = "【錯題】", $ = function(s){ return document.querySelector(s); };
+  function esc(x){ return String(x == null ? "" : x).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  $("#upSubj").innerHTML = ["國語","數學","自然","社會","英文","其他"].map(function(x){ return '<option>' + x + '</option>'; }).join("");
+  function msg(t, bad){ $("#upMsg").textContent = t; $("#upMsg").style.color = bad ? "var(--bad)" : "var(--leaf)"; }
+  function code(){ try { return localStorage.getItem("g5sync.code"); } catch (e) { return null; } }
+  function shrink(file){
+    return new Promise(function(ok, no){
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function(){
+        var k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement("canvas");
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        var q = 0.8, d = c.toDataURL("image/jpeg", q);
+        while (d.length > 850000 && q > 0.3) { q -= 0.1; d = c.toDataURL("image/jpeg", q); }
+        d.length > 850000 ? no(new Error("big")) : ok(d);
+      };
+      img.onerror = function(){ no(new Error("img")); }; img.src = url;
+    });
+  }
+  function hhmm(t){ var d = new Date(t + 8 * 3600000); return (d.getUTCMonth() + 1) + "/" + d.getUTCDate() + " " + ("0" + d.getUTCHours()).slice(-2) + ":" + ("0" + d.getUTCMinutes()).slice(-2); }
+  function loadMine(){
+    var c = code();
+    if (!c) { $("#upHealth").textContent = "這台裝置還沒開啟跨裝置同步，所以看不到進度。"; $("#upList").innerHTML = ""; return; }
+    fetch(EP, {method:"POST", headers:{"Content-Type":"text/plain"}, credentials:"omit", body:JSON.stringify({op:"mine", code:c})}).then(function(r){ return r.json(); }).then(function(r){
+      if (!r || !r.ok) { $("#upHealth").textContent = "進度暫時讀不到，稍後再看。"; return; }
+      var ago = r.lastFetch ? Math.round((Date.now() - r.lastFetch) / 60000) : null;
+      $("#upHealth").innerHTML = ago === null ? "電腦還沒取過題目。" : ago <= 20 ? "電腦運作正常（上次取題 " + hhmm(r.lastFetch) + "，每 10 分鐘取一次）。"
+        : '<span style="color:var(--bad)">電腦已經 ' + ago + ' 分鐘沒取題（上次 ' + hhmm(r.lastFetch) + '）：可能關機或睡眠，題目會等電腦開機後再處理。</span>';
+      var mine = (r.items || []).filter(function(it){ return String(it.note || "").indexOf(TAG) === 0; });
+      $("#upList").innerHTML = mine.length ? '<span class="sect-t" style="font-size:17px">你傳的錯題</span>' + mine.map(function(it){
+        var st = it.status === "done" ? "做好了，已加進錯題" : it.status === "fetched" ? "電腦收到了，正在打字和查答案" : "已送出，等電腦取回（最多 10 分鐘）";
+        return '<div class="hcard"><b>' + esc(it.subject) + '・' + esc(String(it.note || "").slice(TAG.length) || "（沒有補充）") + '</b><span class="meta">' + hhmm(it.time) + ' 送出・' + st + '</span></div>';
+      }).join("") : '<span class="small muted">還沒有傳過錯題。</span>';
+    }).catch(function(){ $("#upHealth").textContent = "進度暫時讀不到（可能沒有網路），稍後再看。"; });
+  }
+  $("#upBox").addEventListener("toggle", function(){ if ($("#upBox").open) loadMine(); });
+  setInterval(function(){ if ($("#upBox").open) loadMine(); }, 60000);
+  $("#upSend").onclick = function(){
+    var c = code();
+    if (!c) return msg("請先在下面「跨裝置同步」開啟或加入同步，這台裝置才能送題目。", true);
+    var f = $("#upFile").files[0]; if (!f) return msg("請先選一張照片。", true);
+    var btn = this; btn.disabled = true; msg("照片處理中…");
+    shrink(f).then(function(img){
+      msg("送出中…");
+      return fetch(EP, {method:"POST", headers:{"Content-Type":"text/plain"}, credentials:"omit", body:JSON.stringify({op:"upload", code:c, subject:$("#upSubj").value, note:(TAG + $("#upNote").value).slice(0, 500), image:img})}).then(function(r){ return r.json(); });
+    }).then(function(r){
+      if (r && r.ok) { msg("送出了！下面看得到進度，做好會出現在上面的錯題裡。"); $("#upFile").value = ""; $("#upNote").value = ""; loadMine(); }
+      else msg(r && r.err === "no-family" ? "這組同步碼在雲端還沒有紀錄，請先在這台裝置開啟同步一次。" : "沒有送成功，請稍後再試一次。", true);
+    }).catch(function(e){ msg(e && e.message === "big" ? "照片太大，請換一張或截圖成小一點再送。" : "沒有送成功（可能沒有網路），請稍後再試一次。", true); })
+    .then(function(){ btn.disabled = false; });
+  };
+})();
+</script>
+<script src="https://windsorya.github.io/g5-help/qrcode.js"></script>
+<script src="https://windsorya.github.io/g5-help/sync.js"></script>
+<script>
+// 跨裝置同步：只同步本站自己的 g5wrong.v1；同步程式與其他站共用 g5-help/sync.js（canReplace／accept：頁面是唯一寫入者，與難題站同一接法）。
+// 只有正在寫入的那一頁啟動同步；雲端版本只能經由本頁、在首頁且沒有未存進度、本頁還沒有自己的修改時換上（G5WrongApp.accept），sync.js 不直接寫這個 key。
+(function(){
+  var box = document.getElementById("g5sync"), A = window.G5WrongApp, api = null;
+  function note(t){ if (box) box.innerHTML = '<p class="small muted" style="margin:0">' + t + '</p>'; }
+  if (!window.G5Sync || !A) return note("跨裝置同步現在載不到，練習紀錄先存在這台裝置。");
+  function up(){
+    if (api) return;
+    try {
+      api = window.G5Sync.init({
+        endpoint: "https://script.google.com/macros/s/AKfycbxwo08VVT5tSRf-DsQEoo1hMlCm1YytGTzj89BPtJ6YWjPieuKyAPbnWXjUKagBdL6l/exec",
+        keys: ["g5wrong.v1"], container: "#g5sync",
+        summarize: {"g5wrong.v1": function(j){ try { var x = JSON.parse(j), it = x.it || {}, ks = Object.keys(it); return "練過 " + ks.length + " 題、學會 " + ks.filter(function(k){ return it[k] && it[k].m; }).length + " 題"; } catch (e) { return "（讀不懂的紀錄）"; } }},
+        canReplace: function(key){ return A.canReplace(key); },
+        accept: function(key, data){ return A.accept(key, data); }
+      });
+    } catch (e) { api = null; note("跨裝置同步暫停，進度先存在這台裝置。"); }
+  }
+  function down(){ if (api) { try { api.destroy(); } catch (e) {} api = null; } }
+  function sync(){
+    if (A.writerReady()) return up();
+    down();
+    note(A.mode() === "RO" ? "這個網站在另一個分頁開著，同步由那一頁負責。" : "跨裝置同步暫停，進度先存在這台裝置。");
+  }
+  A.subscribe(sync); sync();
+})();
+</script>
+</body></html>
