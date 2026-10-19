@@ -26,6 +26,8 @@ CODE = "ABCDEFGHJKMN"
 KEY = "g5wrong.v1"
 KEYS = ["g5sci.v3", "g5help.v1", "g5math.v1", "g5math.v2", "g5chi.v1", "g5soc.v1", "g5wrong.v1"]
 ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+SUBJECT_KEYS = ["g5sci.v3", "g5math.v2", "g5chi.v1", "g5soc.v1"]
+ALL_SUBJECT_OPS = []   # 全部情境裡錯題站對科目 key 發的請求（main 最後核對只有 get）
 
 # 記下 sync.js 有沒有向頁面要求替換（canReplace／accept 的每次結果）。頁面一設定 window.G5WrongApp 就包上計數。
 SPY = r"""
@@ -49,6 +51,7 @@ class Backend:
 
     def __init__(self):
         self.rows, self.down, self.ops, self.clock = {}, False, [], 1791000000000
+        self.subject_ops = []
 
     def handle(self, route):
         if self.down:
@@ -58,7 +61,13 @@ class Backend:
         except Exception:
             req = None
         res = self.core(req)
-        self.ops.append((req or {}).get("op") if isinstance(req, dict) else None)
+        # 錯題站的「各科待加強」（#3016）也會 get 四個科目 key：另外記，不混進 ops——
+        # 否則「sync.js 已向假後端 GET」這類前提會被科目 key 的 get 假成立
+        if isinstance(req, dict) and req.get("key") in SUBJECT_KEYS:
+            self.subject_ops.append((req.get("op"), req.get("key")))
+            ALL_SUBJECT_OPS.append((req.get("op"), req.get("key")))
+        else:
+            self.ops.append((req or {}).get("op") if isinstance(req, dict) else None)
         route.fulfill(status=200, content_type="application/json", headers={"access-control-allow-origin": "*"}, body=json.dumps(res))
 
     def core(self, req):
@@ -236,6 +245,9 @@ def main():
                 except Exception as e:
                     check(f"{name} {f.__name__} 執行例外", False, repr(e)[:300])
             br.close()
+    ops = sorted(set(ALL_SUBJECT_OPS))
+    check("各科待加強 I1：對科目 key 只發 get、從不 put（且真的有讀，四科都讀到）",
+          ALL_SUBJECT_OPS and all(o == "get" for o, _ in ALL_SUBJECT_OPS) and {k for _, k in ALL_SUBJECT_OPS} == set(SUBJECT_KEYS), ops)
     bad = [r for r in e2e.RESULTS if not r[1]]
     print(f"\n{len(e2e.RESULTS) - len(bad)}/{len(e2e.RESULTS)} PASS")
     sys.exit(1 if bad else 0)

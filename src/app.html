@@ -102,6 +102,14 @@ details[open]>summary{margin-bottom:12px}
 .g5s-conflict{padding:14px;border:2px solid var(--sun);border-radius:12px;background:var(--sun-soft)}
 .g5s-notice{color:var(--bad)}
 .g5s-panel svg{width:180px;height:180px;background:#fff;padding:8px;border-radius:8px}
+/* 各科 app 待加強入口（#3016，docs/app-weak-entry-design-20261019.md）：一列一科，狀態句＋前往按鈕 */
+.aw{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;border-top:1px solid var(--line-soft);padding-top:10px}
+.awm{display:grid;gap:2px;min-width:0}
+.awm b{font-size:19px}
+.aws{overflow-wrap:anywhere} .aws.ok{color:var(--sun-deep);font-weight:700} .aws.zero{color:var(--leaf);font-weight:700} .aws.na,.aws.loading{color:var(--muted)}
+.awhint{grid-column:1/-1}
+a.btn{text-decoration:none;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;text-align:center}
+@media (max-width:420px){.aw{grid-template-columns:1fr}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 
 /* ===== 荳荳研究所共同頁首（2026-10-18；六站同一份，改這段要六站一起改）：品牌列＋切換列 ===== */
@@ -137,6 +145,18 @@ details[open]>summary{margin-bottom:12px}
   </header>
   <div id="banners" aria-live="polite"></div>
   <main class="panel" id="main" aria-live="polite"></main>
+  <!-- 各科 app 待加強（#3016）：題目與進度都留在各科站，這裡只讀、只顯示、只給前往按鈕；題數由各科站的 weak-export.js 算（設計書第 2 節） -->
+  <section class="panel" id="appWeak" hidden>
+    <div style="display:grid;gap:4px"><span class="sect-t">各科 app 裡待加強的題</span>
+      <span class="small muted">在自然、數學、國語、社會站答錯或還沒把握的題。題目和進度都留在各科站，按按鈕過去練。</span></div>
+    <div id="awRows" style="display:grid;gap:10px"></div>
+    <div class="row"><span class="small" id="awTotal" role="status"></span><button class="btn ghost sm" type="button" id="awReload">重新讀取</button></div>
+    <div id="awCh" style="display:grid;gap:10px" hidden>
+      <div style="display:grid;gap:4px"><span class="sect-t">考古挑戰（可選，比較難）</span>
+        <span class="small muted">別校考卷或安親班卷出過的難題。範圍內的待加強練完了，再來挑戰。</span></div>
+      <div id="awChRows" style="display:grid;gap:10px"></div>
+    </div>
+  </section>
   <details id="listBox"><summary>全部錯題清單</summary><div class="list" id="list"></div></details>
   <details id="upBox"><summary>爸媽：上傳錯題</summary>
     <div class="form">
@@ -169,6 +189,7 @@ details[open]>summary{margin-bottom:12px}
 <!--@INLINE src/tones.js-->
 <!--@INLINE src/wrongbank.js-->
 <!--@INLINE src/core.js-->
+<!--@INLINE src/appweak.js-->
 <script>
 (function(){
 "use strict";
@@ -361,6 +382,7 @@ window.G5WrongApp = {
   state: function(){ return ctl.view().st; }, items: function(){ return ITEMS.map(function(it){ return it.id; }); },
   mode: function(){ return ctl.mode(); }, dirty: function(){ return ctl.view().dirty; },
   writerReady: function(){ var v = ctl.view(); return v.writer && v.ready; },
+  practicing: function(){ var v = ctl.view(); return !!(v.writer && v.sess); },   // 本頁正在出題（各科待加強區塊這時藏起來）
   canReplace: function(key){ return ctl.canReplace(key); }, accept: function(key, data){ return ctl.accept(key, data); },
   subscribe: function(f){ subs.push(f); }
 };
@@ -451,5 +473,114 @@ window.G5WrongApp = {
     note(A.mode() === "RO" ? "這個網站在另一個分頁開著，同步由那一頁負責。" : "跨裝置同步暫停，進度先存在這台裝置。");
   }
   A.subscribe(sync); sync();
+})();
+</script>
+<script>
+// 各科 app 待加強（交辦 #3016，設計書 docs/app-weak-entry-design-20261019.md；判斷邏輯在 src/appweak.js）。
+// 只讀：本機 localStorage 的四個科目 key、家庭同步雲端那份（op:"get"）；任何科目 key 都不寫（I1）。
+// 題數由各科站自己的 https://windsorya.github.io/<站>/weak-export.js 算（I2：這裡不抄停出名單、不抄待加強判準）；
+// 沒有那個檔、讀不到、讀不懂一律寫「量不到…」，不顯示 0（I3）。
+(function(){
+  var W = window.G5AppWeak, A = window.G5WrongApp, box = document.getElementById("appWeak");
+  if (!W || !box) return;
+  var EP = "https://script.google.com/macros/s/AKfycbxwo08VVT5tSRf-DsQEoo1hMlCm1YytGTzj89BPtJ6YWjPieuKyAPbnWXjUKagBdL6l/exec";   // 與上傳、同步同一個端點（tests/standard.test.js 核對三處一致）
+  var CLOUD_MS = 30000;   // cap-why: 每次 get 在 GAS 端會取寫入鎖（g5-help/gas/core.js store.withLock），和科目站上傳搶同一把鎖；30 秒對「練完回來看」已夠即時
+  var TIMEOUT_MS = 15000;   // 與 g5-help/sync.js request() 同一個逾時
+  var $ = function(s){ return document.querySelector(s); };
+  function esc(x){ return String(x == null ? "" : x).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function get(k){ try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  var S = {};   // 每科：exp（undefined 載入中／null 沒有／"bad"／物件）、cloud（"nocode"／"pending"／"fail"／{rev,data,updated}）、busy、at、code、seq
+  W.SUBJECTS.forEach(function(s){ S[s.key] = { exp: undefined, cloud: "nocode", busy: false, at: 0, code: null, seq: 0 }; });
+
+  // 科目站的 export 檔：一次載一個（載完才檢查錯題站自己的全域有沒有被換掉，才知道是哪一個檔換的）
+  function loadExports(list){
+    if (!list.length) return;
+    var subj = list[0], keep = {}, done = false;
+    W.OWN_GLOBALS.forEach(function(g){ keep[g] = window[g]; });
+    var el = document.createElement("script");
+    el.src = subj.exportUrl; el.async = true;
+    function fin(v){ if (done) return; done = true; S[subj.key].exp = v; render(); loadExports(list.slice(1)); }
+    el.onload = function(){
+      var bad = false;
+      W.OWN_GLOBALS.forEach(function(g){ if (window[g] !== keep[g]) { try { window[g] = keep[g]; } catch (e) {} bad = true; } });
+      var reg = null; try { reg = window.G5WeakExport && window.G5WeakExport[subj.key]; } catch (e) { reg = null; }
+      fin(bad || !reg ? "bad" : reg);
+    };
+    el.onerror = function(){ fin(null); };
+    document.head.appendChild(el);
+  }
+  // 雲端：這台有家庭碼才讀；同一科 CLOUD_MS 內不重讀（force＝按「重新讀取」）；換了家庭碼一定重讀
+  function fetchCloud(subj, force){
+    var st = S[subj.key], c = get("g5sync.code");
+    if (!c) { st.seq++; st.busy = false; st.cloud = "nocode"; st.code = null; return; }
+    if (st.busy) return;
+    if (!force && c === st.code && st.at && Date.now() - st.at < CLOUD_MS) return;
+    if (c !== st.code || st.cloud === "nocode") st.cloud = "pending";
+    st.busy = true; st.at = Date.now(); st.code = c;
+    var seq = ++st.seq, ctrl = window.AbortController ? new AbortController() : null, timer = null;
+    function done(v){ if (seq !== st.seq) return; if (timer !== null) clearTimeout(timer); st.busy = false; st.cloud = v; render(); }
+    timer = setTimeout(function(){ if (ctrl) try { ctrl.abort(); } catch (e) {} done("fail"); }, TIMEOUT_MS);
+    var cfg = { method: "POST", headers: { "Content-Type": "text/plain" }, credentials: "omit", cache: "no-store", body: JSON.stringify({ op: "get", code: c, key: subj.key }) };
+    if (ctrl) cfg.signal = ctrl.signal;
+    try {
+      fetch(EP, cfg).then(function(r){ return r.json(); }).then(function(r){
+        done(W.okCloud(r) ? { rev: r.rev, data: r.data, updated: r.updated } : "fail");
+      }, function(){ done("fail"); });
+    } catch (e) { done("fail"); }
+  }
+  function refresh(force){
+    // 按「重新讀取」才重載先前載不到（null）的 export；還在載入中（undefined）的不重複載
+    var again = force ? W.SUBJECTS.filter(function(s){ return S[s.key].exp === null; }) : [];
+    again.forEach(function(s){ S[s.key].exp = undefined; });
+    W.SUBJECTS.forEach(function(s){ fetchCloud(s, force); });
+    render();
+    if (again.length) loadExports(again);
+  }
+  function rows(){
+    var now = Date.now(), auto = get("g5sync.auto") !== null;
+    return W.SUBJECTS.map(function(s){
+      var local; try { local = { raw: window.localStorage.getItem(s.key) }; } catch (e) { local = { err: true }; }
+      return W.resolve(s, { exp: S[s.key].exp, local: local, cloud: S[s.key].cloud, auto: auto }, now);
+    });
+  }
+  function rowHtml(r){
+    var cls = r.state !== "ok" ? r.state : r.sum.weak ? "ok" : "zero";
+    var href = r.links.weak || r.home, label = r.links.weak ? "直接練" + r.name + "待加強的" : "去" + r.name + "站";
+    var hint = r.state === "ok" && r.sum.weak && !r.links.weak ? '<span class="awhint small muted">到' + esc(r.name) + '站首頁「小考前想全部練一次」，各單元按「練待加強的」。</span>' : "";
+    var src = W.sourceText(r);
+    return '<div class="aw" data-key="' + esc(r.key) + '" data-state="' + esc(r.state) + '"><div class="awm"><b>' + esc(r.name) + '</b><span class="aws ' + cls + '">' + esc(W.rowText(r)) + '</span>' +
+      (src ? '<span class="awsrc small muted">' + esc(src) + '</span>' : "") + '</div><a class="btn ghost sm" href="' + esc(href) + '">' + esc(label) + '</a>' + hint + '</div>';
+  }
+  function chHtml(r){
+    var href = r.links.challenge || r.home, label = r.links.challenge ? "直接練" + r.name + "考古挑戰" : "去" + r.name + "站";
+    return '<div class="aw" data-ch="' + esc(r.key) + '"><div class="awm"><b>' + esc(r.name) + '</b><span class="aws ok">考古挑戰 ' + esc(W.challengeText(r)) + '</span></div><a class="btn ghost sm" href="' + esc(href) + '">' + esc(label) + '</a>' +
+      (r.links.challenge ? "" : '<span class="awhint small muted">' + esc(r.name) + '站還沒有直接開考古挑戰的按鈕，先練首頁的「練待加強的」。</span>') + '</div>';
+  }
+  function render(){
+    if (A && A.practicing && A.practicing()) { box.hidden = true; return; }   // 本頁正在出題：先專心練完
+    box.hidden = false;
+    var R = rows(), P = W.panel(R);
+    $("#awRows").innerHTML = R.map(rowHtml).join("");
+    var t = P.measured ? "各科 app 待加強共 " + P.total + " 題" : P.loading ? "讀取中…" : "各科題數都還量不到";
+    if (P.measured && P.na.length) t += "（" + P.na.join("、") + "量不到，沒算進去）";
+    if (P.measured && P.loading) t += "（還有 " + P.loading + " 科讀取中）";
+    $("#awTotal").textContent = t;
+    $("#awCh").hidden = !P.challenge.length;
+    $("#awChRows").innerHTML = P.challenge.map(chHtml).join("");
+  }
+  var KEYS = W.SUBJECTS.map(function(s){ return s.key; });
+  window.addEventListener("storage", function(e){
+    if (e.key === "g5sync.code") refresh(false);   // 別的分頁加入或停止家庭同步：換碼一定重讀雲端（fetchCloud 比對家庭碼）
+    else if (e.key === null || KEYS.indexOf(e.key) >= 0 || e.key === "g5sync.auto") render();
+  });
+  document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "visible") refresh(false); });
+  // 同一頁裡的 sync.js 開啟／加入家庭同步時（自動開同步、貼家裡的連結）不會有 storage 事件 ⇒ 每 5 秒看一下家庭碼有沒有換，換了才重讀雲端
+  // （只讀一個 localStorage 值，不連網；sync.js 自己每 4 秒輪詢一次，同一量級）
+  var lastCode = get("g5sync.code");
+  setInterval(function(){ var c = get("g5sync.code"); if (c !== lastCode) { lastCode = c; refresh(false); } }, 5000);
+  $("#awReload").onclick = function(){ refresh(true); };
+  if (A && A.subscribe) A.subscribe(render);
+  refresh(false);
+  loadExports(W.SUBJECTS.slice());
 })();
 </script>

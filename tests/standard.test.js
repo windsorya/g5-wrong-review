@@ -76,8 +76,46 @@ test("不被搜尋引擎收錄：index.html 有 robots noindex、robots.txt 全�
 
 test("index.html 是最新 build（src 改了要重跑 build.py）", () => {
   const html = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
-  ["src/core.js", "src/wrongbank.js", "src/tones.js"].forEach((f) => {
+  ["src/core.js", "src/wrongbank.js", "src/tones.js", "src/appweak.js"].forEach((f) => {
     const js = fs.readFileSync(path.join(ROOT, f), "utf8");
     assert.ok(html.includes(js), f + " 沒有內嵌最新版：請跑 python3 build.py");
   });
+});
+
+// ===== 各科 app 待加強（#3016，docs/app-weak-entry-design-20261019.md）的固定標準 =====
+const AW = require("../src/appweak.js");
+
+test("各科待加強：四科順序與網址同切換列前四站、key 都在家庭同步白名單", () => {
+  assert.deepEqual(AW.SUBJECTS.map((s) => s.home), ORDER.slice(0, 4).map((o) => o[0]));
+  assert.deepEqual(AW.SUBJECTS.map((s) => s.name), ["自然", "數學", "國語", "社會"]);
+  const sync = fs.readFileSync(path.join(ROOT, "tests", "vendor", "g5-help-sync.js"), "utf8");
+  const keys = JSON.parse(/var KEYS = (\[[^\]]*\])/.exec(sync)[1].replace(/'/g, '"'));
+  AW.SUBJECTS.forEach((s) => assert.ok(keys.includes(s.key), s.key + " 不在同步白名單"));
+  AW.SUBJECTS.forEach((s) => assert.equal(s.exportUrl, s.home + "weak-export.js"));
+});
+
+test("各科待加強：GAS 端點三處（上傳、同步、待加強）一字不差", () => {
+  const html = fs.readFileSync(path.join(ROOT, "src", "app.html"), "utf8");
+  const eps = html.match(/https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec/g) || [];
+  assert.equal(eps.length, 3, "應有三處：" + eps.length);
+  assert.equal(new Set(eps).size, 1, "三處端點不一致");
+});
+
+// I1：四個科目 key 只讀不寫。appweak.js 整檔、app.html 的待加強那段 script 都不得出現任何寫入 storage 的呼叫
+function appWeakScript(html) {
+  const m = /<script>\n\/\/ 各科 app 待加強[\s\S]*?<\/script>/.exec(html);
+  assert.ok(m, "找不到待加強那段 script");
+  return m[0];
+}
+test("各科待加強 I1：只讀，不寫 localStorage（appweak.js 與網頁那段 script）", () => {
+  const html = fs.readFileSync(path.join(ROOT, "src", "app.html"), "utf8");
+  [fs.readFileSync(path.join(ROOT, "src", "appweak.js"), "utf8"), appWeakScript(html)].forEach((src) => {
+    assert.ok(!/\b(setItem|removeItem|clear)\s*\(/.test(src), "出現寫入 storage 的呼叫");
+    assert.ok(!/localStorage\s*\[[^\]]*\]\s*=(?!=)/.test(src), "出現 localStorage[...] 指派");
+  });
+});
+test("自檢：待加強那段多一個 setItem 要抓得到", () => {
+  const html = fs.readFileSync(path.join(ROOT, "src", "app.html"), "utf8");
+  const bad = html.replace("function get(k){", "function get(k){ localStorage.setItem('g5sci.v3','x');");
+  assert.ok(/\bsetItem\s*\(/.test(appWeakScript(bad)));
 });

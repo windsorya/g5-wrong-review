@@ -95,6 +95,7 @@ def serve(route):
 
 
 SYNC_URL = "https://windsorya.github.io/g5-help/sync.js"
+EXPORTS = "https://windsorya.github.io/*/weak-export.js"
 
 
 def new_ctx(browser, device=None, items=None, seed=None, code=None, flags="", sync=None):
@@ -111,6 +112,9 @@ def new_ctx(browser, device=None, items=None, seed=None, code=None, flags="", sy
         js = Path(sync).read_bytes()
         ctx.route(SYNC_URL, lambda r: r.fulfill(status=200, content_type="application/javascript", body=js))
     ctx.route(GAS, lambda r: r.abort())
+    # 各科待加強（#3016）：四個科目站的 weak-export.js 預設一律 404（既有測試不連網、不受科目站上線與否影響）；
+    # tests/e2e_appweak.py 在 context 上另掛替身（後掛的 route 優先）
+    ctx.route(EXPORTS, lambda r: r.fulfill(status=404, body="not found"))
     init = INIT + flags
     if items is not None:
         init += f"window.G5WrongTestItems = {json.dumps(items, ensure_ascii=False)};"
