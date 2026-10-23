@@ -390,6 +390,54 @@ def e12_format(br, L):
     ctx.close()
 
 
+SCI_URL = "https://windsorya.github.io/g5-sci-review/weak-export.js"
+BAD_API = fake_export("g5sci.v3", SCI_KIND).replace("api: 1,", "api: 999,")
+
+
+def e13_retry_keeps_good(br, L):
+    """Codex 審 d287921 P2：原請求逾時 → 按重試 → 原請求晚到成功 → 重試失敗，不能把已顯示的題數撤掉。"""
+    held, held2 = [], []
+    ctx, pg = open_aw(br, local=ALL4, exports={k: v for k, v in EXP4.items() if k != "g5sci.v3"},
+                      export_handlers={"g5sci.v3": lambda route: held.append(route)}, wait=0, dcl=True)
+    ctx.route(SCI_URL + "?r=*", lambda route: held2.append(route))
+    na = wait_text(pg, "g5sci.v3", "st === 'na'", 20)
+    pg.locator("#awReload").click()
+    pg.wait_for_timeout(500)
+    held[0].fulfill(status=200, content_type="application/javascript", body=EXP4["g5sci.v3"])   # 原請求晚到成功
+    ok = wait_text(pg, "g5sci.v3", "st === 'ok' && t.indexOf('待加強 3 題') === 0", 5)
+    check(f"{L} E13 逾時後晚到的合格結果照樣採用", na and ok and len(held2) == 1, (row(pg, "g5sci.v3"), len(held2)))
+    if held2:
+        held2[0].abort()   # 重試失敗（onerror）
+    pg.wait_for_timeout(800)
+    r = row(pg, "g5sci.v3")
+    check(f"{L} E13 重試失敗不撤掉已顯示的自然 3 題", r["state"] == "ok" and r["text"].startswith("待加強 3 題"), r)
+    check(f"{L} E13 總數仍含自然（5 題）", pg.locator("#awTotal").inner_text() == "各科 app 待加強共 5 題", pg.locator("#awTotal").inner_text())
+    ctx.close()
+
+
+def e14_bad_retry_then_good(br, L):
+    """Codex 審 d287921 P2：原請求逾時 → 重試回不合格（api 999）→ 原請求晚到合格 ⇒ 採用合格的；格式不對也能按重新讀取恢復。"""
+    held = []
+    ctx, pg = open_aw(br, local=ALL4, exports={k: v for k, v in EXP4.items() if k != "g5sci.v3"},
+                      export_handlers={"g5sci.v3": lambda route: held.append(route)}, wait=0, dcl=True)
+    ctx.route(SCI_URL + "?r=*", serve_js(BAD_API))
+    wait_text(pg, "g5sci.v3", "st === 'na'", 20)
+    pg.locator("#awReload").click()
+    fmt = wait_text(pg, "g5sci.v3", "t.indexOf('格式不對') >= 0", 5)
+    held[0].fulfill(status=200, content_type="application/javascript", body=EXP4["g5sci.v3"])
+    ok = wait_text(pg, "g5sci.v3", "st === 'ok' && t.indexOf('待加強 3 題') === 0", 5)
+    check(f"{L} E14 重試不合格、原請求晚到合格 ⇒ 改顯示 3 題", fmt and ok, row(pg, "g5sci.v3"))
+    ctx.close()
+    # 一開始就不合格 ⇒ 格式不對；科目站修好後按重新讀取 ⇒ 恢復
+    ctx, pg = open_aw(br, local=ALL4, exports=dict(EXP4, **{"g5sci.v3": BAD_API}))
+    first = row(pg, "g5sci.v3")
+    ctx.route(SCI_URL + "?r=*", serve_js(EXP4["g5sci.v3"]))
+    pg.locator("#awReload").click()
+    ok = wait_text(pg, "g5sci.v3", "st === 'ok' && t.indexOf('待加強 3 題') === 0", 8)
+    check(f"{L} E14 格式不對也能按重新讀取恢復", "格式不對" in first["text"] and ok, (first, row(pg, "g5sci.v3")))
+    ctx.close()
+
+
 def e9_layout(br, L):
     for w in (390, 320):
         ctx, pg = open_aw(br, {"viewport": {"width": w, "height": 800}, "is_mobile": True, "has_touch": True}, local=ALL4, exports={})
@@ -407,13 +455,13 @@ def safe(f, *a):
 def main():
     with sync_playwright() as p:
         cr = p.chromium.launch()
-        for f in (e1_e2, e3, e4, e5_links, e6_practice, e7_storage, e9_layout, e10_code_switch, e11_export_hang, e12_format):
+        for f in (e1_e2, e3, e4, e5_links, e6_practice, e7_storage, e9_layout, e10_code_switch, e11_export_hang, e12_format, e13_retry_keeps_good, e14_bad_retry_then_good):
             safe(f, cr, "CR")
         cr.close()
         wk = p.webkit.launch()
         ipad = p.devices["iPad (gen 7)"]
         safe(e1_e2, wk, "WK-iPad", ipad)
-        for f in (e3, e4, e6_practice, e10_code_switch, e11_export_hang):
+        for f in (e3, e4, e6_practice, e10_code_switch, e11_export_hang, e13_retry_keeps_good, e14_bad_retry_then_good):
             safe(f, wk, "WK")
         wk.close()
     bad = [r for r in e2e.RESULTS if not r[1]]
