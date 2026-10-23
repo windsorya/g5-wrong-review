@@ -19,7 +19,7 @@
   var API = 1;
   var FIELDS = ["answers", "seen", "weak", "weakToday", "challenge", "challengeToday", "out"];
   // 錯題站自己的全域：科目站的 export 檔不得換掉（換掉＝格式不對，網頁換回原物件）
-  var OWN_GLOBALS = ["G5WrongCore", "G5WrongApp", "G5Tones", "G5Sync", "G5WrongBank", "G5AppWeak"];
+  var OWN_GLOBALS = ["G5WrongCore", "G5WrongApp", "G5Tones", "G5Sync", "G5WrongBank", "G5AppWeak", "G5WeakExportRegister"];
 
   function isObj(x) { return !!x && typeof x === "object" && !Array.isArray(x); }
   function nat(x) { return typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= 9007199254740991; }

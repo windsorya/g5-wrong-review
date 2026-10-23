@@ -27,8 +27,7 @@ FAKE_EXPORT = r"""
 (function(){
   var KIND = {{KIND}};
   function day(ms){ var d = new Date(ms + 8 * 3600000); return d.toISOString().slice(0, 10); }
-  window.G5WeakExport = window.G5WeakExport || {};
-  window.G5WeakExport[{{KEY}}] = { api: 1, key: {{KEY}}, links: {{LINKS}},
+  var E = { api: 1, key: {{KEY}}, links: {{LINKS}},
     summarize: function (raw, now) {
       var o = JSON.parse(raw);
       if (!o || o.v !== 4 || typeof o.cards !== "object") return { ok: false };
@@ -43,13 +42,16 @@ FAKE_EXPORT = r"""
       return r;
     } };
   {{EXTRA}}
+  {{REGISTER}}
 })();
 """
 
 
-def fake_export(key, kind=None, links=None, extra=""):
+# register：檔案怎麼註冊（介面＝執行期間呼叫 G5WeakExportRegister；4agent L20261023151028-f5f29b）
+REG_SYNC = "window.G5WeakExportRegister(E);"
+def fake_export(key, kind=None, links=None, extra="", register=REG_SYNC):
     js = FAKE_EXPORT.replace("{{KEY}}", json.dumps(key)).replace("{{KIND}}", json.dumps(kind or {}))
-    return js.replace("{{LINKS}}", json.dumps(links or {"weak": None, "challenge": None})).replace("{{EXTRA}}", extra)
+    return js.replace("{{LINKS}}", json.dumps(links or {"weak": None, "challenge": None})).replace("{{EXTRA}}", extra).replace("{{REGISTER}}", register)
 
 
 def card(seen=1, good=0, recheck=False):
@@ -383,7 +385,7 @@ def e11_export_hang(br, L):
 def e12_format(br, L):
     """Codex 審 b2380e0 P3：科目站函式回傳不合介面（今天可練比全部多）⇒ 格式不對，不是紀錄讀不懂。"""
     exps = dict(EXP4)
-    exps["g5sci.v3"] = fake_export("g5sci.v3", SCI_KIND, extra="var f = window.G5WeakExport['g5sci.v3'].summarize; window.G5WeakExport['g5sci.v3'].summarize = function(r, n){ var x = f(r, n); x.weakToday = x.weak + 1; return x; };")
+    exps["g5sci.v3"] = fake_export("g5sci.v3", SCI_KIND, extra="var f = E.summarize; E.summarize = function(r, n){ var x = f(r, n); x.weakToday = x.weak + 1; return x; };")
     ctx, pg = open_aw(br, local=ALL4, exports=exps)
     r = row(pg, "g5sci.v3")
     check(f"{L} E12 回傳不合介面 ⇒ 量不到：自然站提供的題數資料格式不對", r["text"] == "量不到：自然站提供的題數資料格式不對", r)
@@ -438,7 +440,7 @@ def e14_bad_retry_then_good(br, L):
     ctx.close()
 
 
-CNT_BAD = fake_export("g5sci.v3", SCI_KIND, extra="var f = window.G5WeakExport['g5sci.v3'].summarize; window.G5WeakExport['g5sci.v3'].summarize = function(r, n){ var x = f(r, n); x.weakToday = x.weak + 1; return x; };")
+CNT_BAD = fake_export("g5sci.v3", SCI_KIND, extra="var f = E.summarize; E.summarize = function(r, n){ var x = f(r, n); x.weakToday = x.weak + 1; return x; };")
 
 
 def e15_count_format_reload(br, L):
@@ -474,6 +476,30 @@ def e16_count_bad_retry_keeps_good(br, L):
     ctx.close()
 
 
+def e17_register(br, L):
+    """4agent L20261023151028-f5f29b 註冊回呼：真瀏覽器的 document.currentScript 歸屬。"""
+    cases = [
+        ("microtask 內註冊（仍在這支 script 執行期間）⇒ 採用", "Promise.resolve().then(function(){ window.G5WeakExportRegister(E); });", "ok"),
+        ("只寫舊的 window.G5WeakExport、沒註冊 ⇒ 格式不對", "window.G5WeakExport = window.G5WeakExport || {}; window.G5WeakExport['g5sci.v3'] = E;", "bad"),
+        ("setTimeout 裡才註冊（currentScript＝null）⇒ 格式不對", "setTimeout(function(){ window.G5WeakExportRegister(E); }, 0);", "bad"),
+        ("註冊兩次 ⇒ 格式不對", "window.G5WeakExportRegister(E); window.G5WeakExportRegister(E);", "bad"),
+    ]
+    for name, reg, want in cases:
+        exps = dict(EXP4, **{"g5sci.v3": fake_export("g5sci.v3", SCI_KIND, register=reg)})
+        ctx, pg = open_aw(br, local=ALL4, exports=exps)
+        pg.wait_for_timeout(300)
+        r = row(pg, "g5sci.v3")
+        good = r["state"] == "ok" if want == "ok" else r["text"] == "量不到：自然站提供的題數資料格式不對"
+        check(f"{L} E17 {name}", good, r)
+        ctx.close()
+    # 自然的檔註冊數學的物件、數學的檔沒註冊 ⇒ 兩科都格式不對（不交叉）
+    exps = dict(EXP4, **{"g5sci.v3": fake_export("g5math.v2", None), "g5math.v2": fake_export("g5math.v2", None, register="")})
+    ctx, pg = open_aw(br, local=ALL4, exports=exps)
+    rs, rm = row(pg, "g5sci.v3"), row(pg, "g5math.v2")
+    check(f"{L} E17 自然的檔註冊數學物件、數學沒註冊 ⇒ 兩科都格式不對", "格式不對" in rs["text"] and "格式不對" in rm["text"], (rs, rm))
+    ctx.close()
+
+
 def e9_layout(br, L):
     for w in (390, 320):
         ctx, pg = open_aw(br, {"viewport": {"width": w, "height": 800}, "is_mobile": True, "has_touch": True}, local=ALL4, exports={})
@@ -491,13 +517,13 @@ def safe(f, *a):
 def main():
     with sync_playwright() as p:
         cr = p.chromium.launch()
-        for f in (e1_e2, e3, e4, e5_links, e6_practice, e7_storage, e9_layout, e10_code_switch, e11_export_hang, e12_format, e13_retry_keeps_good, e14_bad_retry_then_good, e15_count_format_reload, e16_count_bad_retry_keeps_good):
+        for f in (e1_e2, e3, e4, e5_links, e6_practice, e7_storage, e9_layout, e10_code_switch, e11_export_hang, e12_format, e13_retry_keeps_good, e14_bad_retry_then_good, e15_count_format_reload, e16_count_bad_retry_keeps_good, e17_register):
             safe(f, cr, "CR")
         cr.close()
         wk = p.webkit.launch()
         ipad = p.devices["iPad (gen 7)"]
         safe(e1_e2, wk, "WK-iPad", ipad)
-        for f in (e3, e4, e6_practice, e10_code_switch, e11_export_hang, e13_retry_keeps_good, e14_bad_retry_then_good, e15_count_format_reload, e16_count_bad_retry_keeps_good):
+        for f in (e3, e4, e6_practice, e10_code_switch, e11_export_hang, e13_retry_keeps_good, e14_bad_retry_then_good, e15_count_format_reload, e16_count_bad_retry_keeps_good, e17_register):
             safe(f, wk, "WK")
         wk.close()
     bad = [r for r in e2e.RESULTS if not r[1]]

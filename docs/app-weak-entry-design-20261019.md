@@ -63,9 +63,11 @@
 `https://windsorya.github.io/<站>/weak-export.js`（例：`g5-sci-review/weak-export.js`）
 
 ```js
-// 由該站 build 從同一份 core.js／題庫／停出名單產生；除了 window.G5WeakExport 以外不得新增或改動任何全域變數
-window.G5WeakExport = window.G5WeakExport || {};
-window.G5WeakExport["g5sci.v3"] = {
+// 由該站 build 從同一份 core.js／題庫／停出名單產生；不得新增或改動任何全域變數（包在 IIFE 裡）
+// 必須是 classic script（不是 type=module），在檔案執行期間呼叫一次註冊函式（2026-10-24 改，4agent 迴圈 L20261023151028-f5f29b）
+(function () {
+  if (typeof window.G5WeakExportRegister !== "function") return;   // 不是被錯題站載入（例如直接開這個檔）就什麼都不做
+  window.G5WeakExportRegister({
   api: 1,
   key: "g5sci.v3",
   links: { weak: null, challenge: null },   // 有「直接開練」的網址就填（第 3 節），只能是本站網址；沒有填 null
@@ -74,8 +76,12 @@ window.G5WeakExport["g5sci.v3"] = {
     // 讀不懂 ⇒ {ok:false}
     // 讀得懂 ⇒ {ok:true, answers, seen, weak, weakToday, challenge, challengeToday, out}（全部非負整數）
   }
-};
+  });
+})();
 ```
+
+**註冊歸屬與威脅模型（2026-10-24，4agent L20261023151028-f5f29b）**：錯題站以 `document.currentScript` 把每一次註冊對到發出那個 `<script>` 的那一次載入（WeakMap），**不讀** `window.G5WeakExport`。只認「這個檔執行期間（含它自己的 microtask）的第一次呼叫」；`setTimeout`、事件等之後才呼叫時 `currentScript` 是 null，不收；同一次呼叫兩次、註冊的物件 `key` 不是這一科＝格式不對；沒呼叫＝格式不對（不採任何上一次或別科留下的東西）。瀏覽器實測（Chromium、WebKit，40 支交錯）見 `~/scripts/state/fouragent_reports/L20261023151028-f5f29b/claude_probe.txt`。
+本頁與四支 export 在同一個 JavaScript realm，中間沒有安全邊界。本機制只防**寫錯**（沒註冊、註冊錯科、註冊兩次、延後註冊、舊介面只寫全域、殘留、蓋掉錯題站全域含註冊函式），**不防敵意程式**：原型鏈、getter／setter、Proxy、不可列舉或不可設定屬性、置換 `document.currentScript` 或 `Document.prototype`、直接改 DOM 或錯題站函式，都不在範圍，審查不得據以判 FAIL；倉庫被盜與惡意 commit 由倉庫權限處理。
 
 | 欄位 | 定義（由該科站決定，錯題站照抄顯示） |
 |---|---|
@@ -89,7 +95,7 @@ window.G5WeakExport["g5sci.v3"] = {
 錯題站的驗證（不合就當「格式不對」）：`api===1`、`key` 相符、`summarize` 是函式；回傳 `ok:true` 時七欄都是非負整數且 `weakToday≤weak`、`challengeToday≤challenge`；`links` 只接受該站自己網址開頭的字串，且以瀏覽器正規化後的網址再比一次（`../`、`%2e%2e` 解開後跑到別站就不採用），採用的是正規化後那一個。
 `summarize` 丟例外或回 `{ok:false}`＝那一份讀不懂；回傳的東西不合上面的格式（例：`weakToday>weak`、缺欄、不是物件）＝格式不對（Codex 審 b2380e0 P3）。
 載入：四科的 `weak-export.js` 同時載，一科超過 15 秒沒載完就先標「量不到」、晚到照樣採用；介面合格的結果一旦有了，後來任何一次重試失敗或不合格都不撤掉它，合格的不論哪一次載到都採用（Codex 審 d287921）；「量不到」與「格式不對」都可按「重新讀取」以 `?r=` 換網址重載（同網址會搭上卡住的舊請求）；全域有沒有被換是在每個檔自己的 load 事件比對頁面起始時記下的原物件（執行與 load 事件同一個工作）。
-家庭碼換了：舊碼那筆雲端請求中止、作廢，立刻用新碼重讀（Codex 審 b2380e0 P2）。載入後若錯題站自己的全域（`G5WrongCore`、`G5WrongApp`、`G5Tones`、`G5Sync`、`G5WrongBank`、`G5AppWeak`）被換掉，換回原物件並把該科標「格式不對」。
+家庭碼換了：舊碼那筆雲端請求中止、作廢，立刻用新碼重讀（Codex 審 b2380e0 P2）。載入後若錯題站自己的全域（`G5WrongCore`、`G5WrongApp`、`G5Tones`、`G5Sync`、`G5WrongBank`、`G5AppWeak`、`G5WeakExportRegister`）被換掉，換回原物件並把該科標「格式不對」。
 
 為什麼不用其他做法：
 
@@ -132,6 +138,7 @@ e2e（`tests/e2e_appweak.py`，Chromium 桌機＋WebKit iPad；`weak-export.js` 
 - E2 out 題不列：替身回 out:3 ⇒ 畫面任何地方沒有這 3 題、總數不含。
 - E3 讀不到 ⇒ 「量不到」：①檔案 404 ②本機沒有＋沒家庭碼 ③雲端 rev 0 ④雲端失敗 ⑤紀錄讀不懂 ⑥替身改壞錯題站全域 ⑦替身註冊錯 key ⑧替身回傳不合格式（E12）；每種都不出現「0 題」；同一頁才開同步 ⇒ 家庭碼出現後不用重新整理就改讀雲端。
 - E10 舊家庭碼請求還沒回就換碼 ⇒ 改讀新碼、舊回應晚到不蓋上；E11 一科 export 卡住 ⇒ 其他三科照常、逾時標量不到、重新讀取恢復；E13 重試失敗不撤掉晚到的合格結果；E14 重試不合格擋不住晚到合格、格式不對可按重新讀取恢復。
+- E17 註冊回呼（Chromium、WebKit）：microtask 內註冊採用；只寫舊全域、setTimeout 才註冊、註冊兩次＝格式不對；自然的檔註冊數學物件而數學沒註冊 ⇒ 兩科都格式不對。node 矩陣另有 R1–R8、M22c（不可列舉／原型／存取子殘留不採用）。
 - E7 同瀏覽器別的分頁改了科目 key ⇒ 這頁題數跟著更新；E8 沒有 JS 錯誤；E9 390／320px 不橫向捲動。
 - E4 雲端：本機沒有、雲端有 ⇒ 用雲端並標上傳時間；兩份都有 ⇒ 用練過多的那份。
 - E5 深連結：沒有 `links.weak` ⇒ 連首頁＋說明；有 ⇒ 連該網址；別站網址不採用。
@@ -139,7 +146,7 @@ e2e（`tests/e2e_appweak.py`，Chromium 桌機＋WebKit iPad；`weak-export.js` 
 
 ## 7. 需要 william-4c 配合的最小介面（已用 SendMessage 送出；回覆見交辦紀錄）
 
-1. （必要，才會有數字）四站各加 `weak-export.js`，照第 2 節介面；由 build 從同一份 core.js＋題庫＋停出名單產生，不新增其他全域。
+1. （必要，才會有數字）四站各加 `weak-export.js`，照第 2 節介面（2026-10-24 起：IIFE 內於執行期間呼叫 `window.G5WeakExportRegister({...})` 一次，不寫 `window.G5WeakExport`）；由 build 從同一份 core.js＋題庫＋停出名單產生，不新增其他全域。
 2. （可選）`#go=weak`、`#go=challenge` 深連結，做了填進 `links`。
 3. `weak` 的定義＝該站「練待加強的」實際會出的那一群；#3010／#3006 改了出題範圍時，export 跟著同一份程式走。
 

@@ -73,13 +73,19 @@ function harness(opt) {
   vm.runInContext(PAGE, ctx);
   const h = {
     ls, scripts, fetches, window,
-    // 第 i 個 export 請求載完：reg＝要註冊的物件（undefined＝沒註冊）；run＝檔案自己執行的其他動作
+    // 第 i 個 export 請求載完：reg＝執行期間呼叫 G5WeakExportRegister 註冊的物件（undefined＝沒註冊）；run＝檔案自己執行的其他動作。
+    // 執行期間 document.currentScript＝這個元素（HTML 規格；瀏覽器實測見 4agent 報告 claude_probe.txt），執行完才觸發 load。
     load(i, reg, run) {
       const s = scripts[i];
-      if (run) run(window);
-      if (reg !== undefined) { window.G5WeakExport = window.G5WeakExport || {}; window.G5WeakExport[s.key] = reg; }
+      document.currentScript = s.el;
+      try {
+        if (run) { window.G5WeakExport = window.G5WeakExport || {}; run(window); }   // 舊介面的袋：檔案照舊寫也無妨，頁面不讀它
+        if (reg !== undefined) window.G5WeakExportRegister(reg);
+      } finally { document.currentScript = null; }
       s.el.onload();
     },
+    // 延後的工作（setTimeout、事件）：currentScript 是 null
+    later(f) { document.currentScript = null; f(window); },
     fail(i) { scripts[i].el.onerror(); },
     async tick(ms) {
       const end = clock + ms;
@@ -541,6 +547,82 @@ test("M22b 跨科殘留（Codex 審 ebd069f）：自然的檔偷註冊數學槽�
   h2.load(h2.scripts.length - 1, undefined);
   assert.notEqual(h2.state("g5math.v2").text, "待加強 40 題", "唯讀殘留");
   assert.match(h2.state("g5math.v2").text, /格式不對/);
+});
+
+test("M22c 註冊槽讀法與 SEEN 同寬（Codex 審 133d76a）：不可列舉、原型繼承、存取子槽都不得讓別科殘留冒充數學", async () => {
+  const plant = {
+    "不可列舉唯讀": (w) => { Object.defineProperty(w.G5WeakExport, "g5math.v2", { value: ex("g5math.v2", () => sum(40)), enumerable: false, writable: false, configurable: false }); },
+    "原型繼承": (w) => { const proto = { "g5math.v2": ex("g5math.v2", () => sum(40)) }; const own = w.G5WeakExport; Object.setPrototypeOf(own, proto); },
+    "存取子每次回新物件": (w) => { Object.defineProperty(w.G5WeakExport, "g5math.v2", { get() { return ex("g5math.v2", () => sum(40)); }, enumerable: false, configurable: false }); },
+  };
+  for (const [how, f] of Object.entries(plant)) {
+    const h = harness({ local: { [SCI]: save({ w: 3 }) } });
+    h.others();
+    const [a1, a2] = await timeoutThenRetry(h);
+    h.load(a1, ex(SCI));
+    h.load(a2, undefined, f);
+    h.ls.set("g5math.v2", "{}"); h.storage("g5math.v2");
+    h.click();
+    const m = h.scripts.length - 1;
+    assert.equal(h.scripts[m].key, "g5math.v2", how);
+    h.load(m, undefined);
+    assert.notEqual(h.state("g5math.v2").text, "待加強 40 題", how);
+    assert.match(h.state("g5math.v2").text, /格式不對/, how);
+    assert.equal(h.total(), 3, how);
+  }
+});
+
+test("R 註冊回呼有限驗收列（4agent L20261023151028-f5f29b）：只認執行期間第一次、科目相符的註冊", async () => {
+  // R3 只寫舊的 window.G5WeakExport、沒呼叫註冊函式 ⇒ 格式不對
+  let h = harness({ local: { [SCI]: save({ w: 3 }) } });
+  h.others();
+  h.load(h.sciIdx(0), undefined, (w) => { w.G5WeakExport = { [SCI]: ex(SCI) }; });
+  assert.match(h.sci().text, /格式不對/, "R3"); assert.equal(h.total(), 2, "R3");
+  // R4 執行完才在 setTimeout 裡註冊（currentScript＝null）⇒ 不收，仍格式不對；也不影響別的請求
+  h = harness({ local: { [SCI]: save({ w: 3 }) } });
+  h.others();
+  let late = null;
+  h.load(h.sciIdx(0), undefined, (w) => { late = () => w.G5WeakExportRegister(ex(SCI)); });
+  h.later(late);
+  assert.match(h.sci().text, /格式不對/, "R4"); assert.equal(h.total(), 2, "R4");
+  // R4b 延後呼叫發生在「最新一次還在載」時：不得被算到最新那次（currentScript 是 null，不是「最後發出的那次」）
+  h = harness({ local: { [SCI]: save({ w: 3 }) } });
+  h.others();
+  const [b1, b2] = await timeoutThenRetry(h);
+  h.load(b1, undefined, (w) => { late = () => w.G5WeakExportRegister(ex(SCI)); });
+  h.later(late);
+  h.load(b2, undefined);
+  assert.match(h.sci().text, /格式不對/, "R4b"); assert.equal(h.total(), 2, "R4b");
+  // R5 自然的檔註冊數學的物件 ⇒ 自然格式不對；數學照自己那次（2 題）
+  h = harness({ local: { [SCI]: save({ w: 3 }) } });
+  h.others();
+  h.load(h.sciIdx(0), ex("g5math.v2", () => sum(40)));
+  assert.match(h.sci().text, /格式不對/, "R5"); assert.equal(h.state("g5math.v2").text, "待加強 2 題", "R5"); assert.equal(h.total(), 2, "R5");
+  // R6 同一次註冊兩次（即使兩次都合格）⇒ 格式不對
+  h = harness({ local: { [SCI]: save({ w: 3 }) } });
+  h.others();
+  h.load(h.sciIdx(0), ex(SCI), (w) => { w.G5WeakExportRegister(ex(SCI)); });
+  assert.match(h.sci().text, /格式不對/, "R6"); assert.equal(h.total(), 2, "R6");
+  // R7 逾時的舊請求晚到才註冊：歸它自己那一次；新的一次沒註冊 ⇒ 依候選規則採用晚到的合格結果，新那次不冒用
+  h = harness({ local: { [SCI]: save({ w: 3 }) } });
+  h.others();
+  const [a1, a2] = await timeoutThenRetry(h);
+  h.load(a2, undefined);
+  assert.match(h.sci().text, /格式不對/, "R7 新那次沒註冊");
+  h.load(a1, ex(SCI));
+  assert.equal(h.sci().text, "待加強 3 題", "R7 晚到的舊請求是它自己的合格結果"); assert.equal(h.total(), 5, "R7");
+  // R8 檔案用一般賦值把註冊函式換掉 ⇒ 換回、該科格式不對；之後別科照常註冊
+  h = harness({ local: { [SCI]: save({ w: 3 }) } });
+  const reg0 = h.window.G5WeakExportRegister;
+  h.load(h.sciIdx(0), undefined, (w) => { w.G5WeakExportRegister = () => {}; });
+  assert.equal(h.window.G5WeakExportRegister, reg0, "R8 換回");
+  assert.match(h.sci().text, /格式不對/, "R8");
+  h.others();
+  assert.equal(h.state("g5math.v2").text, "待加強 2 題", "R8 別科正常"); assert.equal(h.total(), 2, "R8");
+  // R1 四科各自同步註冊 ⇒ 各自題數、不交叉
+  h = harness({ local: { [SCI]: save({ w: 3 }) } });
+  h.others(); h.load(h.sciIdx(0), ex(SCI));
+  assert.equal(h.sci().text, "待加強 3 題", "R1"); assert.equal(h.state("g5math.v2").text, "待加強 2 題", "R1"); assert.equal(h.total(), 5, "R1");
 });
 
 test("M23 候選隔離：存好後改原物件的 summarize／links 不影響；摘要欄位 getter 拋例外不弄壞頁面", async () => {

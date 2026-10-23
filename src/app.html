@@ -492,17 +492,27 @@ window.G5WrongApp = {
   var EXPORT_MS = 15000;   // 一科的 export 檔多久沒載完就先標「量不到」（同 TIMEOUT_MS）；晚到的照樣入列
   // 每科：att（每次 export 載入留下的事實，W.pick 每次 render 重選；不在載入當下丟掉任何一份）、
   //       cloud（"nocode"／"pending"／"fail"／{rev,data,updated}）、busy、at、code（這份 cloud 屬於哪個家庭碼）、seq、ctrl
-  var S = {}, EG = 0, SEEN = [];   // EG：四科共用的發出順序（嘗試序按發出、不按完成）
+  var S = {}, EG = 0;   // EG：四科共用的發出順序（嘗試序按發出、不按完成）
   W.SUBJECTS.forEach(function(s){ S[s.key] = { att: [], cloud: "nocode", busy: false, at: 0, code: null, seq: 0, ctrl: null }; });
 
   // 科目站的 export 檔：四科同時載，一科卡住不拖住別科。
-  // 錯題站自己的全域在這裡先記一次原物件（OWN）；每個檔「執行完」的 load 事件與執行在同一個工作裡（HTML 規格 execute the script element），
+  // 註冊歸屬（4agent L20261023151028-f5f29b）：export 在執行期間呼叫 G5WeakExportRegister(物件)，
+  // 由瀏覽器的 document.currentScript 對到「發出這個 <script> 的那一次」——不讀共享的 window.G5WeakExport，
+  // 所以上一次殘留、別科偷寫的槽，不論是什麼屬性種類都不會被算成這一次的。task 之後（setTimeout 等）才呼叫＝currentScript 是 null，不收。
+  // 威脅模型見設計書第 2 節：同一 realm 沒有安全邊界，只防寫錯（沒註冊、註冊錯科、註冊兩次、殘留），不防敵意程式。
+  var BY_EL = new WeakMap();
+  window.G5WeakExportRegister = function(obj){
+    var a = BY_EL.get(document.currentScript);
+    if (!a) return;
+    a.calls++; a.reg = a.calls === 1 ? obj : null;   // 註冊兩次＝格式不對
+  };
+  // 錯題站自己的全域（含上面的註冊函式）在這裡先記一次原物件（OWN）；每個檔「執行完」的 load 事件與執行在同一個工作裡（HTML 規格 execute the script element），
   // 所以在它自己的 onload 比對 OWN 就知道是不是這個檔換的，換掉的換回去、該科標格式不對。
   var OWN = {};
   W.OWN_GLOBALS.forEach(function(g){ OWN[g] = window[g]; });
   function loadExport(subj){
-    var st = S[subj.key], a = { id: ++EG, st: "pending", exp: null }, el = document.createElement("script");
-    st.att.push(a);
+    var st = S[subj.key], a = { id: ++EG, st: "pending", exp: null }, el = document.createElement("script"), r = { calls: 0, reg: null };
+    st.att.push(a); BY_EL.set(el, r);
     function fin(v, exp){ clearTimeout(timer); a.st = v; a.exp = exp || null; render(); }   // 一個 <script> 只會 load 或 error 一次
     // 逾時只改「這一次」：晚到的仍可入列；也不會結束別一次較新的請求（M10）
     var timer = setTimeout(function(){ if (a.st === "pending") { a.st = "timeout"; render(); } }, EXPORT_MS);
@@ -511,16 +521,7 @@ window.G5WrongApp = {
     el.onload = function(){
       var bad = false;
       W.OWN_GLOBALS.forEach(function(g){ if (window[g] !== OWN[g]) { try { window[g] = OWN[g]; } catch (e) {} bad = true; } });
-      // 註冊歸屬（M22、Codex 審 ebd069f）：檔案執行與它的 load 事件在同一個工作裡，所以「先前任何一次 onload 都沒在袋裡看過」的物件
-      // 才是這一次寫的。袋裡每個值（含別科槽）都記進 SEEN：上一次殘留、別科的檔偷寫的、唯讀刪不掉的，下一次都不會被算成新註冊。
-      var reg = null, vals = [];
-      try {
-        var bag = window.G5WeakExport;
-        if (bag) { reg = bag[subj.key]; Object.keys(bag).forEach(function(k){ try { vals.push(bag[k]); } catch (e) {} }); }
-      } catch (e) { reg = null; }
-      if (reg && SEEN.indexOf(reg) >= 0) reg = null;
-      vals.forEach(function(v){ if (v && SEEN.indexOf(v) < 0) SEEN.push(v); });
-      var snap = bad ? null : W.snapshot(reg, subj);
+      var snap = bad ? null : W.snapshot(r.reg, subj);
       fin(snap ? "cand" : "bad", snap);
     };
     el.onerror = function(){ fin("error"); };
