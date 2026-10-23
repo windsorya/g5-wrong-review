@@ -489,34 +489,36 @@ window.G5WrongApp = {
   var $ = function(s){ return document.querySelector(s); };
   function esc(x){ return String(x == null ? "" : x).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
   function get(k){ try { return window.localStorage.getItem(k); } catch (e) { return null; } }
-  var EXPORT_MS = 15000;   // 一科的 export 檔多久沒載完就先標「量不到」（同 TIMEOUT_MS）；晚到的照樣採用
-  var S = {};   // 每科：exp（undefined 載入中／null 沒有／"bad"／物件）、cloud（"nocode"／"pending"／"fail"／{rev,data,updated}）、busy、at、code、seq、ctrl、eg
-  W.SUBJECTS.forEach(function(s){ S[s.key] = { exp: undefined, cloud: "nocode", busy: false, at: 0, code: null, seq: 0, ctrl: null, eg: 0 }; });
+  var EXPORT_MS = 15000;   // 一科的 export 檔多久沒載完就先標「量不到」（同 TIMEOUT_MS）；晚到的照樣入列
+  // 每科：att（每次 export 載入留下的事實，W.pick 每次 render 重選；不在載入當下丟掉任何一份）、
+  //       cloud（"nocode"／"pending"／"fail"／{rev,data,updated}）、busy、at、code（這份 cloud 屬於哪個家庭碼）、seq、ctrl
+  var S = {}, EG = 0;   // EG：四科共用的發出順序（嘗試序按發出、不按完成）
+  W.SUBJECTS.forEach(function(s){ S[s.key] = { att: [], cloud: "nocode", busy: false, at: 0, code: null, seq: 0, ctrl: null }; });
 
   // 科目站的 export 檔：四科同時載，一科卡住不拖住別科。
   // 錯題站自己的全域在這裡先記一次原物件（OWN）；每個檔「執行完」的 load 事件與執行在同一個工作裡（HTML 規格 execute the script element），
   // 所以在它自己的 onload 比對 OWN 就知道是不是這個檔換的，換掉的換回去、該科標格式不對。
   var OWN = {};
   W.OWN_GLOBALS.forEach(function(g){ OWN[g] = window[g]; });
-  // 載到且可用：介面合格、對目前的本機／雲端紀錄也不回格式不對（W.usable，與 resolve 讀同一批紀錄）
-  function good(x, key){ var subj = null; W.SUBJECTS.forEach(function(s){ if (s.key === key) subj = s; }); return !!subj && W.usable(subj, x, src(key), Date.now()); }
   function loadExport(subj){
-    var st = S[subj.key], eg = ++st.eg, el = document.createElement("script");
-    st.exp = undefined;
-    var timer = setTimeout(function(){ if (eg === st.eg && st.exp === undefined) { st.exp = null; render(); } }, EXPORT_MS);
+    var st = S[subj.key], a = { id: ++EG, st: "pending", exp: null }, el = document.createElement("script");
+    st.att.push(a);
+    function fin(v, exp){ clearTimeout(timer); a.st = v; a.exp = exp || null; render(); }   // 一個 <script> 只會 load 或 error 一次
+    // 逾時只改「這一次」：晚到的仍可入列；也不會結束別一次較新的請求（M10）
+    var timer = setTimeout(function(){ if (a.st === "pending") { a.st = "timeout"; render(); } }, EXPORT_MS);
     // 重試換一個網址（?r=）：同網址的舊請求還卡著時，瀏覽器會讓新的 <script> 搭同一個卡住的請求
-    el.src = subj.exportUrl + (eg > 1 ? "?r=" + eg + "-" + Date.now() : ""); el.async = true;
+    el.src = subj.exportUrl + (st.att.length > 1 ? "?r=" + a.id + "-" + Date.now() : ""); el.async = true;
     el.onload = function(){
-      clearTimeout(timer);
       var bad = false;
       W.OWN_GLOBALS.forEach(function(g){ if (window[g] !== OWN[g]) { try { window[g] = OWN[g]; } catch (e) {} bad = true; } });
-      var reg = null; try { reg = window.G5WeakExport && window.G5WeakExport[subj.key]; } catch (e) { reg = null; }
-      // 規則（Codex 審 d287921、b662aeb）：「合格」＝good()＝W.usable（含題數格式）；合格的結果一旦有了，後來任何一次的失敗都不撤掉它；
-      // 合格的結果不論哪一次（含逾時後晚到）載到都採用；不合格（"bad"）只蓋過「最新一次」或「載不到」
-      if (bad || !reg) { if (!good(st.exp, subj.key) && (eg === st.eg || st.exp === null)) { st.exp = "bad"; render(); } }
-      else if (good(reg, subj.key) || !good(st.exp, subj.key)) { st.exp = reg; render(); }
+      // 註冊槽讀完就清掉：檔案執行與它的 load 事件在同一個工作裡，所以槽裡的東西一定是這一次寫的；
+      // 沒清的話，下一次載入沒註冊也會把上一次殘留的物件算成自己的（M22）
+      var reg = null;
+      try { var bag = window.G5WeakExport; if (bag) { reg = bag[subj.key]; try { delete bag[subj.key]; } catch (e) { bag[subj.key] = undefined; } } } catch (e) { reg = null; }
+      var snap = bad ? null : W.snapshot(reg, subj);
+      fin(snap ? "cand" : "bad", snap);
     };
-    el.onerror = function(){ clearTimeout(timer); if (eg === st.eg && !good(st.exp, subj.key)) { st.exp = null; render(); } };
+    el.onerror = function(){ fin("error"); };
     document.head.appendChild(el);
   }
   // 雲端：這台有家庭碼才讀；同一科 CLOUD_MS 內不重讀（force＝按「重新讀取」）；
@@ -532,7 +534,8 @@ window.G5WrongApp = {
     st.busy = true; st.at = Date.now(); st.code = c;
     var seq = ++st.seq, ctrl = window.AbortController ? new AbortController() : null, timer = null;
     st.ctrl = ctrl;
-    function done(v){ if (seq !== st.seq) return; if (timer !== null) clearTimeout(timer); st.busy = false; st.ctrl = null; st.cloud = v; render(); }
+    function done(v){ if (seq !== st.seq) return;
+if (timer !== null) clearTimeout(timer); st.busy = false; st.ctrl = null; st.cloud = v; render(); }
     timer = setTimeout(function(){ if (ctrl) try { ctrl.abort(); } catch (e) {} done("fail"); }, TIMEOUT_MS);
     var cfg = { method: "POST", headers: { "Content-Type": "text/plain" }, credentials: "omit", cache: "no-store", body: JSON.stringify({ op: "get", code: c, key: subj.key }) };
     if (ctrl) cfg.signal = ctrl.signal;
@@ -543,19 +546,22 @@ window.G5WrongApp = {
     } catch (e) { done("fail"); }
   }
   function refresh(force){
-    // 按「重新讀取」才重載先前載不到（null，含逾時）或格式不對（"bad"）的 export；還在載入中（undefined）、已有結果的不重複載
-    var again = force ? W.SUBJECTS.filter(function(s){ var x = S[s.key].exp; return x !== undefined && !good(x, s.key); }) : [];
+    // 按「重新讀取」才重載畫面上不是 ok、且沒有 export 還在載的科目（W.wantReload）；先決定重載哪些，再發雲端請求（雲端一發就變讀取中）
+    var now = Date.now();
+    var again = force ? W.SUBJECTS.filter(function(s){ return W.wantReload(W.pick(s, S[s.key].att, base(s.key), now), S[s.key].att); }) : [];
     W.SUBJECTS.forEach(function(s){ fetchCloud(s, force); });
     again.forEach(loadExport);
     render();
   }
-  function src(key){
+  // 這一刻的紀錄：雲端那份只在屬於「現在這台的家庭碼」時才算（換碼、移除碼、storage.clear 後舊家庭的資料不參與，M13–M15）
+  function base(key){
     var local; try { local = { raw: window.localStorage.getItem(key) }; } catch (e) { local = { err: true }; }
-    return { exp: S[key].exp, local: local, cloud: S[key].cloud, auto: get("g5sync.auto") !== null };
+    var c = get("g5sync.code"), st = S[key], cloud = !c ? "nocode" : c === st.code ? st.cloud : "pending";
+    return { local: local, cloud: cloud, auto: get("g5sync.auto") !== null };
   }
   function rows(){
-    var now = Date.now();
-    return W.SUBJECTS.map(function(s){ return W.resolve(s, src(s.key), now); });
+    var now = Date.now();   // 同一次選擇，四科、每個候選都用同一個 now（M24）
+    return W.SUBJECTS.map(function(s){ return W.pick(s, S[s.key].att, base(s.key), now); });
   }
   function rowHtml(r){
     var cls = r.state !== "ok" ? r.state : r.sum.weak ? "ok" : "zero";

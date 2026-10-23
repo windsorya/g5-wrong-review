@@ -58,13 +58,15 @@
   function summarize(exp, raw, now) {
     var s;
     try { s = exp.summarize(raw, now); } catch (e) { return null; }
-    if (isObj(s) && s.ok === false) return null;
-    if (!okSummary(s)) return "format";
     var out = {};
-    FIELDS.forEach(function (f) { out[f] = s[f]; });
+    try {   // 回傳物件的欄位可能是丟例外的 getter：一律當格式不對，不讓它弄壞整頁（Codex 設計者 M23）
+      if (isObj(s) && s.ok === false) return null;
+      if (!okSummary(s)) return "format";
+      FIELDS.forEach(function (f) { out[f] = s[f]; });
+    } catch (e) { return "format"; }
     return out;
   }
-  // 要讀的紀錄（本機一份、雲端不同於本機時再一份）；resolve 與 usable 共用，兩處看的是同一批資料
+  // 要讀的紀錄（本機一份、雲端不同於本機時再一份）；resolve 用
   function candidates(local, cloud) {
     local = local || { raw: null };
     var localRaw = !local.err && typeof local.raw === "string" ? local.raw : null;
@@ -73,15 +75,6 @@
     if (localRaw !== null) cands.push({ from: "local", raw: localRaw });
     if (cloudRaw !== null && cloudRaw !== localRaw) cands.push({ from: "cloud", raw: cloudRaw, updated: cloud.updated });
     return cands;
-  }
-  // 這份 export 在目前的紀錄上「可用」＝介面合格，且對每一份紀錄都不回格式不對（Codex 審 b662aeb：只驗介面會讓
-  // 題數格式不對的 export 被當成好的——擋住重新讀取、蓋掉晚到的合格結果）。網頁的採用／保留／重載判斷一律用這一個。
-  // 讀不懂（{ok:false}、丟例外）不算不可用：那是紀錄的問題，換一份 export 也一樣。
-  function usable(subj, exp, src, now) {
-    try {
-      if (!okExport(exp, subj.key)) return false;
-      return !candidates(src && src.local, src && src.cloud).some(function (c) { return summarize(exp, c.raw, now) === "format"; });
-    } catch (e) { return false; }
   }
   function more(a, b) { return a.answers !== b.answers ? a.answers > b.answers : a.seen > b.seen; }
 
@@ -92,13 +85,14 @@
   //   auto：這台的同步碼是自動建立、還沒跟家人連上（g5sync.auto）
   // 回傳 {key, name, home, state:"loading"|"ok"|"na", why, sum, from:"local"|"cloud", updated, cloudNote, links}
   function resolve(subj, src, now) {
-    var r = { key: subj.key, name: subj.name, home: subj.home, state: "na", why: "", sum: null, from: null, updated: null, cloudNote: "", links: { weak: null, challenge: null } };
+    var r = { key: subj.key, name: subj.name, home: subj.home, state: "na", kind: "unreachable", why: "", sum: null, from: null, updated: null, cloudNote: "", links: { weak: null, challenge: null } };
     var exp = src.exp, local = src.local || { raw: null }, cloud = src.cloud;
     if (exp === undefined) { r.state = "loading"; r.why = "讀取中…"; return r; }
     if (exp === null) { r.why = "量不到：" + subj.name + "站還沒提供待加強題數（或現在連不上網路）"; return r; }
     var good = false;
     try { good = okExport(exp, subj.key); if (good) r.links = links(exp, subj); } catch (e) { good = false; }
-    if (!good) { r.why = "量不到：" + subj.name + "站提供的題數資料格式不對"; return r; }
+    if (!good) { r.kind = "format"; r.why = "量不到：" + subj.name + "站提供的題數資料格式不對"; return r; }
+    r.kind = "unmeasured";
     var cands = candidates(local, cloud);
     var best = null, format = false;
     cands.forEach(function (c) {
@@ -113,7 +107,7 @@
       return r;
     }
     if (cloud === "pending") { r.state = "loading"; r.why = "讀取中…"; return r; }   // 本機讀不懂但雲端還在讀：等雲端
-    if (format) { r.why = "量不到：" + subj.name + "站提供的題數資料格式不對"; return r; }
+    if (format) { r.kind = "format"; r.why = "量不到：" + subj.name + "站提供的題數資料格式不對"; return r; }
     if (cands.length) { r.why = "量不到：" + subj.name + "站的紀錄讀不懂"; return r; }
     var here = local.err ? "這台裝置的紀錄讀不到" : "這台裝置沒有" + subj.name + "站的紀錄";
     if (cloud === "nocode") r.why = "量不到：" + here + "，也還沒開跨裝置同步";
@@ -121,6 +115,39 @@
       (src.auto ? "（這台的同步還沒跟家裡其他裝置連上，請到下面「跨裝置同步」貼家裡的連結）" : "");
     else r.why = "量不到：" + here + "，雲端暫時讀不到（可能沒有網路）";
     return r;
+  }
+
+  // ── 一科可能有好幾次 export 載入（逾時後重試、手動重新讀取）。Codex 設計者（/tmp/cc3016_designer_out.md）根因：
+  // 「可不可用」＝resolve(export, 本機紀錄, 雲端紀錄, now)，不是 export 自己的屬性；舊做法在載入當下判一次就丟掉別的 export，
+  // 紀錄一變就無法挽回。現在：每次載入都留下事實（attempt），畫面每次 render 用同一份紀錄與時間逐一 resolve，再選一列。
+  // attempt：{id: 發出順序, st: "pending"|"timeout"|"error"|"bad"|"cand", exp: 介面合格的快照（st=cand 才有）}
+  //   pending＝還在載、沒逾時；timeout＝逾時沒回（晚到仍會改成 cand／bad／error）；error＝載不到；bad＝介面不合格或沒註冊
+  // 優先序（同級取 id 最大＝最晚發出的那次）：ok ＞ 讀取中 ＞ 介面合格但紀錄量不到 ＞ 格式不對 ＞ export 載不到
+  var TIER = { ok: 5, loading: 4, unmeasured: 3, format: 2, unreachable: 1 };
+  var AS_EXP = { timeout: null, error: null, bad: "bad" };
+  function tier(r) { return r.state === "ok" ? TIER.ok : r.state === "loading" ? TIER.loading : TIER[r.kind] || TIER.unreachable; }
+  function pick(subj, attempts, base, now) {
+    var best = null, bestT = 0, bestId = -1;
+    (attempts && attempts.length ? attempts : [{ id: 0, st: "pending" }]).forEach(function (a) {
+      var exp = a.st === "cand" ? a.exp : a.st === "pending" ? undefined : AS_EXP[a.st] !== undefined ? AS_EXP[a.st] : null;
+      var r = resolve(subj, { exp: exp, local: base.local, cloud: base.cloud, auto: base.auto }, now), t = tier(r);
+      if (t > bestT || (t === bestT && a.id > bestId)) { best = r; bestT = t; bestId = a.id; }
+    });
+    best.attempt = bestId;
+    return best;
+  }
+  // 還有一次 export 在載、沒逾時：這時按重新讀取不再發新的（M10）
+  function exportPending(attempts) { return (attempts || []).some(function (a) { return a.st === "pending"; }); }
+  // 按「重新讀取」要不要重載這科的 export：畫面這科不是 ok、且沒有載入中的（設計者第 3 節；「沒有紀錄」也會重載，明確成本、不自動重試）
+  function wantReload(row, attempts) { return row.state !== "ok" && !exportPending(attempts); }
+  // 載入當下把 export 拍成快照：之後科目站的檔改了原物件的 summarize／links 也不影響已存的候選（M23）。不合格回 null。
+  function snapshot(reg, subj) {
+    try {
+      if (!okExport(reg, subj.key)) return null;
+      var fn = reg.summarize, l = links(reg, subj), snap = { api: reg.api, key: reg.key, links: { weak: l.weak, challenge: l.challenge } };
+      snap.summarize = function (raw, now) { return fn.call(snap, raw, now); };
+      return snap;
+    } catch (e) { return null; }
   }
 
   // 整區的顯示模型：總數只加有數字的科目、只加範圍內的 weak（不加 challenge、不加 out）
@@ -161,7 +188,8 @@
 
   var api = {
     SUBJECTS: SUBJECTS, API: API, FIELDS: FIELDS, OWN_GLOBALS: OWN_GLOBALS,
-    okExport: okExport, okSummary: okSummary, okCloud: okCloud, links: links, summarize: summarize, usable: usable,
+    okExport: okExport, okSummary: okSummary, okCloud: okCloud, links: links, summarize: summarize,
+    pick: pick, exportPending: exportPending, wantReload: wantReload, snapshot: snapshot, TIER: TIER,
     resolve: resolve, panel: panel, rowText: rowText, challengeText: challengeText, sourceText: sourceText, taipei: taipei
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.G5AppWeak = api;
