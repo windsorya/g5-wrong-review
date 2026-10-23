@@ -1206,7 +1206,7 @@ window.G5WrongApp = {
   var EXPORT_MS = 15000;   // 一科的 export 檔多久沒載完就先標「量不到」（同 TIMEOUT_MS）；晚到的照樣入列
   // 每科：att（每次 export 載入留下的事實，W.pick 每次 render 重選；不在載入當下丟掉任何一份）、
   //       cloud（"nocode"／"pending"／"fail"／{rev,data,updated}）、busy、at、code（這份 cloud 屬於哪個家庭碼）、seq、ctrl
-  var S = {}, EG = 0;   // EG：四科共用的發出順序（嘗試序按發出、不按完成）
+  var S = {}, EG = 0, SEEN = [];   // EG：四科共用的發出順序（嘗試序按發出、不按完成）
   W.SUBJECTS.forEach(function(s){ S[s.key] = { att: [], cloud: "nocode", busy: false, at: 0, code: null, seq: 0, ctrl: null }; });
 
   // 科目站的 export 檔：四科同時載，一科卡住不拖住別科。
@@ -1225,10 +1225,15 @@ window.G5WrongApp = {
     el.onload = function(){
       var bad = false;
       W.OWN_GLOBALS.forEach(function(g){ if (window[g] !== OWN[g]) { try { window[g] = OWN[g]; } catch (e) {} bad = true; } });
-      // 註冊槽讀完就清掉：檔案執行與它的 load 事件在同一個工作裡，所以槽裡的東西一定是這一次寫的；
-      // 沒清的話，下一次載入沒註冊也會把上一次殘留的物件算成自己的（M22）
-      var reg = null;
-      try { var bag = window.G5WeakExport; if (bag) { reg = bag[subj.key]; try { delete bag[subj.key]; } catch (e) { bag[subj.key] = undefined; } } } catch (e) { reg = null; }
+      // 註冊歸屬（M22、Codex 審 ebd069f）：檔案執行與它的 load 事件在同一個工作裡，所以「先前任何一次 onload 都沒在袋裡看過」的物件
+      // 才是這一次寫的。袋裡每個值（含別科槽）都記進 SEEN：上一次殘留、別科的檔偷寫的、唯讀刪不掉的，下一次都不會被算成新註冊。
+      var reg = null, vals = [];
+      try {
+        var bag = window.G5WeakExport;
+        if (bag) { reg = bag[subj.key]; Object.keys(bag).forEach(function(k){ try { vals.push(bag[k]); } catch (e) {} }); }
+      } catch (e) { reg = null; }
+      if (reg && SEEN.indexOf(reg) >= 0) reg = null;
+      vals.forEach(function(v){ if (v && SEEN.indexOf(v) < 0) SEEN.push(v); });
       var snap = bad ? null : W.snapshot(reg, subj);
       fin(snap ? "cand" : "bad", snap);
     };

@@ -448,6 +448,49 @@ test("M18 量不到不冒充零：七種量不到原因各自正確、總數不�
   assert.match(h.sci().text, /紀錄讀不到/); assert.equal(h.totalText(), "各科題數都還量不到");
 });
 
+test("M19 來源選擇：本機 3 題 vs 雲端 7 題，依 answers→seen→本機 選完整一份；字串相同每候選只 summarize 一次；一份讀不懂用另一份", async () => {
+  const cases = [
+    ["answers 本機勝", { a: 20 }, { a: 10 }, 3],
+    ["answers 雲端勝", { a: 10 }, { a: 20 }, 7],
+    ["answers 平手比 seen", { a: 10, s: 1 }, { a: 10, s: 9 }, 7],
+    ["全平手取本機", { a: 10, s: 5 }, { a: 10, s: 5 }, 3],
+    ["雲端讀不懂", { a: 10 }, { bad: 1 }, 3],
+    ["本機讀不懂", { bad: 1 }, { a: 1 }, 7],
+  ];
+  const E = () => ex(SCI, (o) => (o.bad ? { ok: false } : sum(o.w, { answers: o.a, seen: o.s === undefined ? 5 : o.s })));
+  for (const [name, l, c, want] of cases) {
+    const h = harness({ code: "F", local: { [SCI]: save(Object.assign({ w: 3 }, l)) } });
+    h.load(0, E()); h.others();
+    for (let i = 0; i < 4; i++) await h.cloud(i, h.fetches[i].body.key === SCI ? { ok: true, rev: 2, data: save(Object.assign({ w: 7 }, c)), updated: T0 } : REV0);
+    assert.equal(h.sci().text, `待加強 ${want} 題`, name); assert.equal(h.total(), want + 2, name);
+  }
+  let calls = 0;
+  const same = save({ w: 3 });
+  const h = harness({ code: "F", local: { [SCI]: same } });
+  h.load(0, ex(SCI, (o) => { calls++; return sum(o.w); })); h.others();
+  for (let i = 0; i < 4; i++) await h.cloud(i, h.fetches[i].body.key === SCI ? { ok: true, rev: 2, data: same, updated: T0 } : REV0);
+  calls = 0; h.storage(SCI);
+  assert.equal(calls, 1, "本機與雲端字串相同只算一次");
+  assert.equal(h.total(), 5);
+});
+
+test("M20 連結：缺省、別站、../ 跨站、%2e%2e 跨站一律回該科首頁；合法站內網址採正規化後那一個（weak、challenge 都驗）", async () => {
+  const HOME_SCI = "https://windsorya.github.io/g5-sci-review/";
+  const cases = [
+    [undefined, HOME_SCI], ["https://windsorya.github.io/g5-math-review/", HOME_SCI],
+    [HOME_SCI + "../g5-math-review/", HOME_SCI], [HOME_SCI + "%2e%2e/g5-math-review/", HOME_SCI],
+    [HOME_SCI + "a/../?weak=1", HOME_SCI + "?weak=1"],
+  ];
+  for (const [u, want] of cases) {
+    const h = harness({ local: { [SCI]: save({ w: 3, c: 1 }) } });
+    h.others();
+    h.load(0, ex(SCI, (o) => sum(o.w, { challenge: 1, challengeToday: 1 }), { links: u === undefined ? undefined : { weak: u, challenge: u } }));
+    assert.equal(h.href(SCI), want, String(u)); assert.equal(h.total(), 5);
+    const ch = new RegExp('data-ch="' + SCI + '"[\\s\\S]*?href="([^"]*)"').exec(h.window.document.querySelector("#awChRows").innerHTML);
+    assert.ok(ch, "考古挑戰列"); assert.equal(ch[1], want, "challenge " + String(u));
+  }
+});
+
 test("M21 全域保護：自然的檔換掉錯題站全域→換回原物件、自然格式不對、其他三科正常", async () => {
   const h = harness({ local: { [SCI]: save({ w: 3 }) } });
   const own = h.window.G5WrongCore;
@@ -463,13 +506,41 @@ test("M22 殘留註冊槽：A2 沒註冊／只註冊別科，不得把 A1 留下
     h.others();
     const [a1, a2] = await timeoutThenRetry(h);
     h.load(a1, ex(SCI, (o) => (o.w === undefined ? { ok: false } : sum(o.w))));
-    assert.equal(h.window.G5WeakExport[SCI], undefined, "讀完清掉註冊槽");
     h.load(a2, undefined, how === "只註冊別科" ? (w) => { w.G5WeakExport["g5math.v2"] = ex("g5math.v2", () => sum(40)); } : null);
     assert.equal(h.sci().text, "待加強 3 題", how); assert.equal(h.total(), 5, how);
     // A1 讀不懂的紀錄：讀不懂（A1，介面合格）優先於格式不對（A2 沒註冊）；勝出的仍是 A1
     h.ls.set(SCI, "{}"); h.storage(SCI);
     assert.match(h.sci().text, /讀不懂/);
   }
+});
+
+test("M22b 跨科殘留（Codex 審 ebd069f）：自然的檔偷註冊數學槽，之後數學重試沒註冊，不得把那個物件當數學的", async () => {
+  const h = harness({ local: { [SCI]: save({ w: 3 }) } });
+  h.others();
+  const [a1, a2] = await timeoutThenRetry(h);
+  h.load(a1, ex(SCI));
+  h.load(a2, undefined, (w) => { w.G5WeakExport["g5math.v2"] = ex("g5math.v2", () => sum(40)); });
+  assert.equal(h.total(), 5);
+  h.ls.set("g5math.v2", "{}"); h.storage("g5math.v2");   // 數學原 export 對 {} 回格式錯 ⇒ 畫面不是 ok
+  const e = h.E;
+  h.click();
+  const m = h.scripts.length - 1;
+  assert.equal(h.E, e + 1); assert.equal(h.scripts[m].key, "g5math.v2");
+  h.load(m, undefined);   // 數學新的檔載入成功但沒註冊
+  assert.notEqual(h.state("g5math.v2").text, "待加強 40 題");
+  assert.match(h.state("g5math.v2").text, /格式不對/);
+  assert.equal(h.total(), 3);
+  // 清不掉的槽（唯讀、不可刪）：自然的檔把數學槽定成唯讀，之後數學重試沒註冊，仍不得採用那個殘留物件
+  const h2 = harness({ local: { [SCI]: save({ w: 3 }) } });
+  h2.others();
+  const [b1, b2] = await timeoutThenRetry(h2);
+  h2.load(b1, ex(SCI));
+  h2.load(b2, undefined, (w) => { Object.defineProperty(w.G5WeakExport, "g5math.v2", { value: ex("g5math.v2", () => sum(40)), enumerable: true, writable: false, configurable: false }); });
+  h2.ls.set("g5math.v2", "{}"); h2.storage("g5math.v2");
+  h2.click();
+  h2.load(h2.scripts.length - 1, undefined);
+  assert.notEqual(h2.state("g5math.v2").text, "待加強 40 題", "唯讀殘留");
+  assert.match(h2.state("g5math.v2").text, /格式不對/);
 });
 
 test("M23 候選隔離：存好後改原物件的 summarize／links 不影響；摘要欄位 getter 拋例外不弄壞頁面", async () => {
