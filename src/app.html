@@ -534,8 +534,7 @@ window.G5WrongApp = {
     st.busy = true; st.at = Date.now(); st.code = c;
     var seq = ++st.seq, ctrl = window.AbortController ? new AbortController() : null, timer = null;
     st.ctrl = ctrl;
-    function done(v){ if (seq !== st.seq) return;
-if (timer !== null) clearTimeout(timer); st.busy = false; st.ctrl = null; st.cloud = v; render(); }
+    function done(v){ if (seq !== st.seq) return; if (timer !== null) clearTimeout(timer); st.busy = false; st.ctrl = null; st.cloud = v; render(); }
     timer = setTimeout(function(){ if (ctrl) try { ctrl.abort(); } catch (e) {} done("fail"); }, TIMEOUT_MS);
     var cfg = { method: "POST", headers: { "Content-Type": "text/plain" }, credentials: "omit", cache: "no-store", body: JSON.stringify({ op: "get", code: c, key: subj.key }) };
     if (ctrl) cfg.signal = ctrl.signal;
