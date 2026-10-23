@@ -112,7 +112,7 @@ test("本機讀不懂、雲端還在讀 ⇒ 讀取中（等雲端，不先說讀
 });
 
 test("本機 vs 雲端：比作答筆數 → 練過題數 → 平手用本機；兩份相同只算本機", () => {
-  const cloud = (o) => { const d = save(o); assert.ok(W.summarize(mk(), d, NOW), "測資本身要讀得懂"); return { rev: 5, data: d, updated: Date.UTC(2026, 9, 19, 13, 30) }; };
+  const cloud = (o) => { const d = save(o); const t = W.summarize(mk(), d, NOW); assert.ok(t && typeof t === "object", "測資本身要讀得懂（\"format\" 也是真值，不能只驗 truthy）"); return { rev: 5, data: d, updated: Date.UTC(2026, 9, 19, 13, 30) }; };
   let r = R({ exp: mk(), local: { raw: save({ a: 10, w: 1 }) }, cloud: cloud({ a: 11, w: 9 }) });
   assert.equal(r.from, "cloud"); assert.equal(r.sum.weak, 9);
   assert.equal(W.sourceText(r), "依雲端紀錄（10/19 21:30 上傳）");
@@ -164,7 +164,10 @@ test("深連結：只接受該站自己的網址，其他一律當沒有", () =>
   assert.equal(r.links.weak, ok);
   assert.equal(r.links.challenge, "https://windsorya.github.io/g5-sci-review/#go=challenge");
   ["https://windsorya.github.io/g5-math-review/#go=weak", "https://evil.example/g5-sci-review/", "javascript:alert(1)",
-    "https://windsorya.github.io/g5-sci-review/\"><script>", 7, null].forEach((u) => {
+    "https://windsorya.github.io/g5-sci-review/\"><script>", 7, null,
+    // Codex 審 b2380e0 P2：前綴對、正規化後其實是別站
+    "https://windsorya.github.io/g5-sci-review/../g5-math-review/#go=weak", "https://windsorya.github.io/g5-sci-review/%2e%2e/g5-math-review/#go=weak",
+    "https://windsorya.github.io/g5-sci-review/%2E%2E/g5-math-review/", "https://windsorya.github.io/g5-sci-review/.%2e/g5-math-review/"].forEach((u) => {
     r = R({ exp: mk({ links: { weak: u, challenge: u } }), local: { raw: save() } });
     assert.equal(r.links.weak, null, String(u)); assert.equal(r.links.challenge, null, String(u));
   });
@@ -179,4 +182,29 @@ test("自檢：resolve 若把 out 加進總數，總數測試要抓得到（突�
   const rows = [R({ exp: mk(), local: { raw: save({ w: 1, wt: 1, c: 0, ct: 0, o: 9 }) } })];
   const mutated = rows.reduce((n, r) => n + r.sum.weak + r.sum.out, 0);
   assert.notEqual(W.panel(rows).total, mutated);
+});
+
+test("採用的深連結是正規化後的網址，且仍在本站（Codex 審 b2380e0 P2）", () => {
+  const r = R({ exp: mk({ links: { weak: "https://windsorya.github.io/g5-sci-review/./a/../#go=weak", challenge: null } }), local: { raw: save() } });
+  assert.equal(r.links.weak, "https://windsorya.github.io/g5-sci-review/#go=weak");
+});
+
+test("科目站函式回傳不合介面＝格式不對；回 {ok:false} 或丟例外＝讀不懂（Codex 審 b2380e0 P3，設計書第 2 節）", () => {
+  const ret = (v) => mk({ summarize() { return v; } });
+  const malformed = [{ ok: true, answers: 1, seen: 1, weak: 3, weakToday: 4, challenge: 0, challengeToday: 0, out: 0 },
+    { ok: true, answers: 1 }, { ok: true, answers: -1, seen: 1, weak: 0, weakToday: 0, challenge: 0, challengeToday: 0, out: 0 },
+    { ok: "yes" }, {}, null, undefined, 3, "x", []];
+  malformed.forEach((v) => {
+    assert.equal(W.summarize(ret(v), "{}", NOW), "format", JSON.stringify(v));
+    const r = R({ exp: ret(v), local: { raw: "{}" }, cloud: "nocode" });
+    assert.equal(r.state, "na"); assert.equal(r.why, "量不到：自然站提供的題數資料格式不對", JSON.stringify(v));
+  });
+  assert.equal(W.summarize(ret({ ok: false }), "{}", NOW), null);
+  assert.match(R({ exp: ret({ ok: false }), local: { raw: "{}" }, cloud: "nocode" }).why, /紀錄讀不懂/);
+  // 一份格式不對、另一份讀得懂 ⇒ 用讀得懂那份
+  const exp = mk({ summarize(raw) { return raw === "fmt" ? { ok: true } : mk().summarize(raw); } });
+  const r = R({ exp, local: { raw: "fmt" }, cloud: { rev: 2, data: save({ w: 5, wt: 5 }), updated: NOW } });
+  assert.equal(r.state, "ok"); assert.equal(r.sum.weak, 5);
+  // 格式不對但雲端還在讀 ⇒ 先等雲端
+  assert.equal(R({ exp, local: { raw: "fmt" }, cloud: "pending" }).state, "loading");
 });

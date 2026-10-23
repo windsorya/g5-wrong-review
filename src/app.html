@@ -489,36 +489,46 @@ window.G5WrongApp = {
   var $ = function(s){ return document.querySelector(s); };
   function esc(x){ return String(x == null ? "" : x).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
   function get(k){ try { return window.localStorage.getItem(k); } catch (e) { return null; } }
-  var S = {};   // 每科：exp（undefined 載入中／null 沒有／"bad"／物件）、cloud（"nocode"／"pending"／"fail"／{rev,data,updated}）、busy、at、code、seq
-  W.SUBJECTS.forEach(function(s){ S[s.key] = { exp: undefined, cloud: "nocode", busy: false, at: 0, code: null, seq: 0 }; });
+  var EXPORT_MS = 15000;   // 一科的 export 檔多久沒載完就先標「量不到」（同 TIMEOUT_MS）；晚到的照樣採用
+  var S = {};   // 每科：exp（undefined 載入中／null 沒有／"bad"／物件）、cloud（"nocode"／"pending"／"fail"／{rev,data,updated}）、busy、at、code、seq、ctrl、eg
+  W.SUBJECTS.forEach(function(s){ S[s.key] = { exp: undefined, cloud: "nocode", busy: false, at: 0, code: null, seq: 0, ctrl: null, eg: 0 }; });
 
-  // 科目站的 export 檔：一次載一個（載完才檢查錯題站自己的全域有沒有被換掉，才知道是哪一個檔換的）
-  function loadExports(list){
-    if (!list.length) return;
-    var subj = list[0], keep = {}, done = false;
-    W.OWN_GLOBALS.forEach(function(g){ keep[g] = window[g]; });
-    var el = document.createElement("script");
-    el.src = subj.exportUrl; el.async = true;
-    function fin(v){ if (done) return; done = true; S[subj.key].exp = v; render(); loadExports(list.slice(1)); }
+  // 科目站的 export 檔：四科同時載，一科卡住不拖住別科。
+  // 錯題站自己的全域在這裡先記一次原物件（OWN）；每個檔「執行完」的 load 事件與執行在同一個工作裡（HTML 規格 execute the script element），
+  // 所以在它自己的 onload 比對 OWN 就知道是不是這個檔換的，換掉的換回去、該科標格式不對。
+  var OWN = {};
+  W.OWN_GLOBALS.forEach(function(g){ OWN[g] = window[g]; });
+  function loadExport(subj){
+    var st = S[subj.key], eg = ++st.eg, el = document.createElement("script");
+    st.exp = undefined;
+    var timer = setTimeout(function(){ if (eg === st.eg && st.exp === undefined) { st.exp = null; render(); } }, EXPORT_MS);
+    // 重試換一個網址（?r=）：同網址的舊請求還卡著時，瀏覽器會讓新的 <script> 搭同一個卡住的請求
+    el.src = subj.exportUrl + (eg > 1 ? "?r=" + eg + "-" + Date.now() : ""); el.async = true;
     el.onload = function(){
+      clearTimeout(timer);
       var bad = false;
-      W.OWN_GLOBALS.forEach(function(g){ if (window[g] !== keep[g]) { try { window[g] = keep[g]; } catch (e) {} bad = true; } });
+      W.OWN_GLOBALS.forEach(function(g){ if (window[g] !== OWN[g]) { try { window[g] = OWN[g]; } catch (e) {} bad = true; } });
       var reg = null; try { reg = window.G5WeakExport && window.G5WeakExport[subj.key]; } catch (e) { reg = null; }
-      fin(bad || !reg ? "bad" : reg);
+      // 晚到（逾時後才載完）也採用：本科還沒有更新的結果（不是合格物件）時才換上
+      if (eg === st.eg || st.exp === null || st.exp === undefined) { st.exp = bad || !reg ? "bad" : reg; render(); }
     };
-    el.onerror = function(){ fin(null); };
+    el.onerror = function(){ clearTimeout(timer); if (eg === st.eg) { st.exp = null; render(); } };
     document.head.appendChild(el);
   }
-  // 雲端：這台有家庭碼才讀；同一科 CLOUD_MS 內不重讀（force＝按「重新讀取」）；換了家庭碼一定重讀
+  // 雲端：這台有家庭碼才讀；同一科 CLOUD_MS 內不重讀（force＝按「重新讀取」）；
+  // 換了家庭碼一定重讀——舊家庭碼那一筆還在路上就中止、作廢（seq），不讓它擋住新碼也不讓它的回應蓋上來
   function fetchCloud(subj, force){
     var st = S[subj.key], c = get("g5sync.code");
-    if (!c) { st.seq++; st.busy = false; st.cloud = "nocode"; st.code = null; return; }
-    if (st.busy) return;
+    function cancel(){ st.seq++; st.busy = false; if (st.ctrl) { try { st.ctrl.abort(); } catch (e) {} st.ctrl = null; } }
+    if (!c) { cancel(); st.cloud = "nocode"; st.code = null; return; }
+    if (st.busy && c === st.code) return;
+    if (st.busy) cancel();
     if (!force && c === st.code && st.at && Date.now() - st.at < CLOUD_MS) return;
     if (c !== st.code || st.cloud === "nocode") st.cloud = "pending";
     st.busy = true; st.at = Date.now(); st.code = c;
     var seq = ++st.seq, ctrl = window.AbortController ? new AbortController() : null, timer = null;
-    function done(v){ if (seq !== st.seq) return; if (timer !== null) clearTimeout(timer); st.busy = false; st.cloud = v; render(); }
+    st.ctrl = ctrl;
+    function done(v){ if (seq !== st.seq) return; if (timer !== null) clearTimeout(timer); st.busy = false; st.ctrl = null; st.cloud = v; render(); }
     timer = setTimeout(function(){ if (ctrl) try { ctrl.abort(); } catch (e) {} done("fail"); }, TIMEOUT_MS);
     var cfg = { method: "POST", headers: { "Content-Type": "text/plain" }, credentials: "omit", cache: "no-store", body: JSON.stringify({ op: "get", code: c, key: subj.key }) };
     if (ctrl) cfg.signal = ctrl.signal;
@@ -529,12 +539,11 @@ window.G5WrongApp = {
     } catch (e) { done("fail"); }
   }
   function refresh(force){
-    // 按「重新讀取」才重載先前載不到（null）的 export；還在載入中（undefined）的不重複載
+    // 按「重新讀取」才重載先前載不到（null，含逾時）的 export；還在載入中（undefined）的不重複載
     var again = force ? W.SUBJECTS.filter(function(s){ return S[s.key].exp === null; }) : [];
-    again.forEach(function(s){ S[s.key].exp = undefined; });
     W.SUBJECTS.forEach(function(s){ fetchCloud(s, force); });
+    again.forEach(loadExport);
     render();
-    if (again.length) loadExports(again);
   }
   function rows(){
     var now = Date.now(), auto = get("g5sync.auto") !== null;
@@ -580,7 +589,7 @@ window.G5WrongApp = {
   setInterval(function(){ var c = get("g5sync.code"); if (c !== lastCode) { lastCode = c; refresh(false); } }, 5000);
   $("#awReload").onclick = function(){ refresh(true); };
   if (A && A.subscribe) A.subscribe(render);
+  W.SUBJECTS.forEach(loadExport);
   refresh(false);
-  loadExports(W.SUBJECTS.slice());
 })();
 </script>

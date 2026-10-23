@@ -33,9 +33,13 @@
     if (!FIELDS.every(function (f) { return nat(s[f]); })) return false;
     return s.weakToday <= s.weak && s.challengeToday <= s.challenge;
   }
-  // links 只接受該站自己的網址（不讓別站的檔把孩子帶到別處）
+  // links 只接受該站自己的網址（不讓別站的檔把孩子帶到別處）。
+  // 比對的是瀏覽器正規化後的網址（../、%2e%2e 會被解開），回傳正規化後那一個——畫面標「自然」就真的去自然站。
   function okLink(u, subj) {
-    return typeof u === "string" && u.indexOf(subj.home) === 0 && u.length < 300 && !/[\s"'<>\\]/.test(u) ? u : null;
+    if (typeof u !== "string" || u.length >= 300 || /[\s"'<>\\]/.test(u) || u.indexOf(subj.home) !== 0) return null;
+    var h;
+    try { h = new URL(u).href; } catch (e) { return null; }
+    return h.indexOf(subj.home) === 0 ? h : null;
   }
   function links(exp, subj) {
     try {
@@ -49,11 +53,13 @@
     if (r.rev === 0) return r.data === null && r.updated === null;
     return typeof r.data === "string" && nat(r.updated);
   }
-  // 用該科站的函式讀一份紀錄：丟例外或回傳不合格＝讀不懂
+  // 用該科站的函式讀一份紀錄：丟例外或回傳 {ok:false}＝讀不懂（null）；
+  // 回傳的東西本身不合介面（ok:true 但欄位不對、不是物件…）＝科目站給的格式不對（"format"，設計書第 2 節）
   function summarize(exp, raw, now) {
     var s;
     try { s = exp.summarize(raw, now); } catch (e) { return null; }
-    if (!okSummary(s)) return null;
+    if (isObj(s) && s.ok === false) return null;
+    if (!okSummary(s)) return "format";
     var out = {};
     FIELDS.forEach(function (f) { out[f] = s[f]; });
     return out;
@@ -79,9 +85,10 @@
     var cands = [];
     if (localRaw !== null) cands.push({ from: "local", raw: localRaw });
     if (cloudRaw !== null && cloudRaw !== localRaw) cands.push({ from: "cloud", raw: cloudRaw, updated: cloud.updated });
-    var best = null;
+    var best = null, format = false;
     cands.forEach(function (c) {
       var s = summarize(exp, c.raw, now);
+      if (s === "format") { format = true; return; }
       if (!s) return;
       if (!best || more(s, best.sum)) best = { from: c.from, sum: s, updated: c.updated || null };
     });
@@ -91,6 +98,7 @@
       return r;
     }
     if (cloud === "pending") { r.state = "loading"; r.why = "讀取中…"; return r; }   // 本機讀不懂但雲端還在讀：等雲端
+    if (format) { r.why = "量不到：" + subj.name + "站提供的題數資料格式不對"; return r; }
     if (cands.length) { r.why = "量不到：" + subj.name + "站的紀錄讀不懂"; return r; }
     var here = local.err ? "這台裝置的紀錄讀不到" : "這台裝置沒有" + subj.name + "站的紀錄";
     if (cloud === "nocode") r.why = "量不到：" + here + "，也還沒開跨裝置同步";

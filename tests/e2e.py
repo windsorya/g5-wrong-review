@@ -115,6 +115,7 @@ def new_ctx(browser, device=None, items=None, seed=None, code=None, flags="", sy
     # 各科待加強（#3016）：四個科目站的 weak-export.js 預設一律 404（既有測試不連網、不受科目站上線與否影響）；
     # tests/e2e_appweak.py 在 context 上另掛替身（後掛的 route 優先）
     ctx.route(EXPORTS, lambda r: r.fulfill(status=404, body="not found"))
+    ctx.route(EXPORTS + "?*", lambda r: r.fulfill(status=404, body="not found"))   # 重試帶 ?r=
     init = INIT + flags
     if items is not None:
         init += f"window.G5WrongTestItems = {json.dumps(items, ensure_ascii=False)};"

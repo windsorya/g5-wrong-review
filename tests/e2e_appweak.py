@@ -97,7 +97,7 @@ def serve_js(js):
     return lambda route: route.fulfill(status=200, content_type="application/javascript", body=js)
 
 
-def open_aw(br, device=None, local=None, exports=None, code=None, auto=False, cloud=None, down=False, items=None, flags="", gas=False):
+def open_aw(br, device=None, local=None, exports=None, code=None, auto=False, cloud=None, down=False, items=None, flags="", gas=False, gas_handler=None, export_handlers=None, wait=10, dcl=False):
     """local：{key: raw}；exports：{key: js}（沒列的科目＝404）；cloud：{key: (rev, data, updated)}。"""
     once = "".join(f"window.__rawSet({json.dumps(k)}, {json.dumps(v)});" for k, v in (local or {}).items())
     if auto:
@@ -107,12 +107,26 @@ def open_aw(br, device=None, local=None, exports=None, code=None, auto=False, cl
     for k, js in (exports or {}).items():
         site = HOME[k].rstrip("/").rsplit("/", 1)[1]
         ctx.route(f"https://windsorya.github.io/{site}/weak-export.js", serve_js(js))
+    for k, h in (export_handlers or {}).items():   # 自訂 export 回應（例：一直不回）
+        site = HOME[k].rstrip("/").rsplit("/", 1)[1]
+        ctx.route(f"https://windsorya.github.io/{site}/weak-export.js", h)
     sent = []
-    if code or gas:
+    if gas_handler:
+        ctx.route(GAS, gas_handler)
+    elif code or gas:
         ctx.route(GAS, gas_backend(cloud or {}, sent, down))
-    pg = page_in(ctx)
+    if dcl:   # 有檔一直不回時，window 的 load 事件永遠等不到 ⇒ 只等 DOMContentLoaded
+        pg = ctx.new_page()
+        pg.set_default_timeout(6000)
+        pg.__errors = []
+        pg.on("pageerror", lambda e: pg.__errors.append(str(e)))
+        pg.goto(e2e.URL, wait_until="domcontentloaded")
+        e2e.wait_main(pg)
+    else:
+        pg = page_in(ctx)
     pg.__sent = sent
-    settle(pg)
+    if wait:
+        settle(pg, wait)
     return ctx, pg
 
 
@@ -300,6 +314,82 @@ def e7_storage(br, L):
     ctx.close()
 
 
+def wait_text(pg, key, js_cond, secs):
+    try:
+        pg.wait_for_function("(() => { const e = document.querySelector('#awRows .aw[data-key=\"" + key + "\"]'); if (!e) return false; const t = e.querySelector('.aws').textContent, st = e.dataset.state; return " + js_cond + "; })()", timeout=secs * 1000)
+        return True
+    except Exception:
+        return False
+
+
+def e10_code_switch(br, L):
+    """Codex 審 b2380e0 P2：舊家庭碼 A 的請求還沒回來時換成 B ⇒ 要改讀 B；A 晚到的回應不能蓋上來。"""
+    code_b = "BCDEFGHJKMNP"
+    five = subject_save({f"s{i}": card() for i in range(5)}, log=[f"s{i}" for i in range(5)])   # B 家庭：自然待加強 5
+    held, sent = [], []
+
+    def gas(route):
+        req = json.loads(route.request.post_data or "{}")
+        sent.append(req)
+        if req.get("code") == CODE:
+            held.append(route)   # A 的請求先不回（模擬 GAS 慢）
+            return
+        data = five if req.get("key") == "g5sci.v3" else None
+        body = {"ok": True, "rev": 4 if data else 0, "data": data, "updated": 1792375600000 if data else None}
+        route.fulfill(status=200, content_type="application/json", headers={"access-control-allow-origin": "*"}, body=json.dumps(body))
+    ctx, pg = open_aw(br, exports=EXP4, code=CODE, gas_handler=gas, wait=0)
+    pg.wait_for_timeout(800)
+    pg.evaluate(f"window.__rawSet('g5sync.code', {json.dumps(code_b)})")   # 同一頁換碼（沒有 storage 事件，靠 5 秒輪詢）
+    ok_b = wait_text(pg, "g5sci.v3", "t.indexOf('待加強 5 題') === 0", 12)
+    check(f"{L} E10 A 還沒回來就換成 B ⇒ 不用重新整理就改讀 B（自然 5 題）", ok_b, (row(pg, "g5sci.v3"), [x.get("code") for x in sent]))
+    for r in held:   # A 的舊回應晚到（自然 3 題）
+        try:
+            r.fulfill(status=200, content_type="application/json", headers={"access-control-allow-origin": "*"},
+                      body=json.dumps({"ok": True, "rev": 7, "data": SCI if json.loads(r.request.post_data)["key"] == "g5sci.v3" else None, "updated": 1792375600000 if json.loads(r.request.post_data)["key"] == "g5sci.v3" else None} if json.loads(r.request.post_data)["key"] == "g5sci.v3" else {"ok": True, "rev": 0, "data": None, "updated": None}))
+        except Exception:
+            pass   # 已被頁面中止＝正確
+    pg.wait_for_timeout(1500)
+    r = row(pg, "g5sci.v3")
+    check(f"{L} E10 A 晚到的回應不蓋上 B（仍是 5 題、不是 A 的 3 題）", r["text"].startswith("待加強 5 題"), r)
+    check(f"{L} E10 換碼後四科都向 B 發過 get", sorted(x["key"] for x in sent if x.get("code") == code_b) == sorted(k for k, _, _ in SUBJ), sent)
+    check(f"{L} E10 沒有 JS 錯誤", not errs(pg), errs(pg))
+    ctx.close()
+
+
+def e11_export_hang(br, L):
+    """Codex 審 b2380e0 P2：一科的 export 檔一直不回 ⇒ 其他三科照常；那一科逾時標量不到；按重新讀取能恢復。"""
+    held = []
+    ctx, pg = open_aw(br, local=ALL4, exports={k: v for k, v in EXP4.items() if k != "g5sci.v3"},
+                      export_handlers={"g5sci.v3": lambda route: held.append(route)}, wait=0, dcl=True)
+    others = all(wait_text(pg, k, "st === 'ok'", 6) for k in ("g5math.v2", "g5chi.v1", "g5soc.v1"))
+    check(f"{L} E11 自然的檔卡住 ⇒ 數學、國語、社會不等它，照常顯示", others and row(pg, "g5sci.v3")["state"] == "loading", rows(pg))
+    tot = pg.locator("#awTotal").inner_text()
+    check(f"{L} E11 卡住那科還在讀時，總數只算已讀到的並註明", tot.startswith("各科 app 待加強共 2 題") and "讀取中" in tot, tot)
+    na = wait_text(pg, "g5sci.v3", "st === 'na' && t.indexOf('量不到：') === 0", 20)
+    check(f"{L} E11 卡住超過逾時 ⇒ 自然改標量不到（不永遠讀取中）", na, row(pg, "g5sci.v3"))
+    ctx.route("https://windsorya.github.io/g5-sci-review/weak-export.js?r=*", serve_js(EXP4["g5sci.v3"]))   # 重試帶 ?r=
+    pg.locator("#awReload").click()
+    ok = wait_text(pg, "g5sci.v3", "st === 'ok' && t.indexOf('待加強 3 題') === 0", 10)
+    check(f"{L} E11 按重新讀取 ⇒ 自然恢復顯示 3 題", ok, row(pg, "g5sci.v3"))
+    check(f"{L} E11 沒有 JS 錯誤", not errs(pg), errs(pg))
+    for r in held:
+        try:
+            r.abort()
+        except Exception:
+            pass
+    ctx.close()
+
+
+def e12_format(br, L):
+    """Codex 審 b2380e0 P3：科目站函式回傳不合介面（今天可練比全部多）⇒ 格式不對，不是紀錄讀不懂。"""
+    exps = dict(EXP4)
+    exps["g5sci.v3"] = fake_export("g5sci.v3", SCI_KIND, extra="var f = window.G5WeakExport['g5sci.v3'].summarize; window.G5WeakExport['g5sci.v3'].summarize = function(r, n){ var x = f(r, n); x.weakToday = x.weak + 1; return x; };")
+    ctx, pg = open_aw(br, local=ALL4, exports=exps)
+    r = row(pg, "g5sci.v3")
+    check(f"{L} E12 回傳不合介面 ⇒ 量不到：自然站提供的題數資料格式不對", r["text"] == "量不到：自然站提供的題數資料格式不對", r)
+    ctx.close()
+
+
 def e9_layout(br, L):
     for w in (390, 320):
         ctx, pg = open_aw(br, {"viewport": {"width": w, "height": 800}, "is_mobile": True, "has_touch": True}, local=ALL4, exports={})
@@ -317,13 +407,13 @@ def safe(f, *a):
 def main():
     with sync_playwright() as p:
         cr = p.chromium.launch()
-        for f in (e1_e2, e3, e4, e5_links, e6_practice, e7_storage, e9_layout):
+        for f in (e1_e2, e3, e4, e5_links, e6_practice, e7_storage, e9_layout, e10_code_switch, e11_export_hang, e12_format):
             safe(f, cr, "CR")
         cr.close()
         wk = p.webkit.launch()
         ipad = p.devices["iPad (gen 7)"]
         safe(e1_e2, wk, "WK-iPad", ipad)
-        for f in (e3, e4, e6_practice):
+        for f in (e3, e4, e6_practice, e10_code_switch, e11_export_hang):
             safe(f, wk, "WK")
         wk.close()
     bad = [r for r in e2e.RESULTS if not r[1]]
