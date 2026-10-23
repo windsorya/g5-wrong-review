@@ -208,3 +208,27 @@ test("科目站函式回傳不合介面＝格式不對；回 {ok:false} 或丟�
   // 格式不對但雲端還在讀 ⇒ 先等雲端
   assert.equal(R({ exp, local: { raw: "fmt" }, cloud: "pending" }).state, "loading");
 });
+
+test("usable：介面合格且對每份紀錄都不回格式不對才算可用（Codex 審 b662aeb：題數格式錯也要算不可用）", () => {
+  const cnt = mk({ summarize(raw) { const s = mk().summarize(raw); s.weakToday = s.weak + 1; return s; } });   // 題數格式錯（今天可練＞全部）
+  const src = { local: { raw: save() }, cloud: "nocode" };
+  assert.equal(W.usable(SCI, mk(), src, NOW), true);
+  assert.equal(W.usable(SCI, cnt, src, NOW), false, "介面合格但題數格式錯 ⇒ 不可用（網頁才會重載、不讓它蓋掉合格結果）");
+  assert.equal(W.usable(SCI, mk({ api: 999 }), src, NOW), false);
+  assert.equal(W.usable(SCI, "bad", src, NOW), false);
+  assert.equal(W.usable(SCI, null, src, NOW), false);
+  assert.equal(W.usable(SCI, undefined, src, NOW), false);
+  // 只有雲端那份格式錯也算不可用
+  const fmtCloud = mk({ summarize(raw) { return raw === "fmt" ? { ok: true } : mk().summarize(raw); } });
+  assert.equal(W.usable(SCI, fmtCloud, { local: { raw: save() }, cloud: { rev: 2, data: "fmt", updated: NOW } }, NOW), false);
+  // 讀不懂（ok:false／丟例外）是紀錄的問題，換 export 也一樣 ⇒ 仍可用
+  assert.equal(W.usable(SCI, mk(), { local: { raw: save({ bad: 1 }) }, cloud: "nocode" }, NOW), true);
+  assert.equal(W.usable(SCI, mk({ summarize() { throw new Error("x"); } }), src, NOW), true);
+  // 沒有紀錄：只看介面
+  assert.equal(W.usable(SCI, mk(), { local: { raw: null }, cloud: "nocode" }, NOW), true);
+  assert.equal(W.usable(SCI, cnt, { local: { raw: null }, cloud: "nocode" }, NOW), true);
+  // 與 resolve 一致：resolve 判格式不對的，usable 一定判不可用
+  [mk(), cnt, mk({ api: 2 })].forEach((e) => {
+    if (/格式不對/.test(R(Object.assign({ exp: e }, src)).why)) assert.equal(W.usable(SCI, e, src, NOW), false);
+  });
+});

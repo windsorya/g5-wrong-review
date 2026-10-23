@@ -64,6 +64,25 @@
     FIELDS.forEach(function (f) { out[f] = s[f]; });
     return out;
   }
+  // 要讀的紀錄（本機一份、雲端不同於本機時再一份）；resolve 與 usable 共用，兩處看的是同一批資料
+  function candidates(local, cloud) {
+    local = local || { raw: null };
+    var localRaw = !local.err && typeof local.raw === "string" ? local.raw : null;
+    var cloudRaw = isObj(cloud) && typeof cloud.data === "string" ? cloud.data : null;
+    var cands = [];
+    if (localRaw !== null) cands.push({ from: "local", raw: localRaw });
+    if (cloudRaw !== null && cloudRaw !== localRaw) cands.push({ from: "cloud", raw: cloudRaw, updated: cloud.updated });
+    return cands;
+  }
+  // 這份 export 在目前的紀錄上「可用」＝介面合格，且對每一份紀錄都不回格式不對（Codex 審 b662aeb：只驗介面會讓
+  // 題數格式不對的 export 被當成好的——擋住重新讀取、蓋掉晚到的合格結果）。網頁的採用／保留／重載判斷一律用這一個。
+  // 讀不懂（{ok:false}、丟例外）不算不可用：那是紀錄的問題，換一份 export 也一樣。
+  function usable(subj, exp, src, now) {
+    try {
+      if (!okExport(exp, subj.key)) return false;
+      return !candidates(src && src.local, src && src.cloud).some(function (c) { return summarize(exp, c.raw, now) === "format"; });
+    } catch (e) { return false; }
+  }
   function more(a, b) { return a.answers !== b.answers ? a.answers > b.answers : a.seen > b.seen; }
 
   // 一科的結果。src：
@@ -80,11 +99,7 @@
     var good = false;
     try { good = okExport(exp, subj.key); if (good) r.links = links(exp, subj); } catch (e) { good = false; }
     if (!good) { r.why = "量不到：" + subj.name + "站提供的題數資料格式不對"; return r; }
-    var localRaw = !local.err && typeof local.raw === "string" ? local.raw : null;
-    var cloudRaw = isObj(cloud) && typeof cloud.data === "string" ? cloud.data : null;
-    var cands = [];
-    if (localRaw !== null) cands.push({ from: "local", raw: localRaw });
-    if (cloudRaw !== null && cloudRaw !== localRaw) cands.push({ from: "cloud", raw: cloudRaw, updated: cloud.updated });
+    var cands = candidates(local, cloud);
     var best = null, format = false;
     cands.forEach(function (c) {
       var s = summarize(exp, c.raw, now);
@@ -146,7 +161,7 @@
 
   var api = {
     SUBJECTS: SUBJECTS, API: API, FIELDS: FIELDS, OWN_GLOBALS: OWN_GLOBALS,
-    okExport: okExport, okSummary: okSummary, okCloud: okCloud, links: links, summarize: summarize,
+    okExport: okExport, okSummary: okSummary, okCloud: okCloud, links: links, summarize: summarize, usable: usable,
     resolve: resolve, panel: panel, rowText: rowText, challengeText: challengeText, sourceText: sourceText, taipei: taipei
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.G5AppWeak = api;

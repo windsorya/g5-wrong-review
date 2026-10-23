@@ -498,7 +498,8 @@ window.G5WrongApp = {
   // 所以在它自己的 onload 比對 OWN 就知道是不是這個檔換的，換掉的換回去、該科標格式不對。
   var OWN = {};
   W.OWN_GLOBALS.forEach(function(g){ OWN[g] = window[g]; });
-  function good(x, key){ try { return W.okExport(x, key); } catch (e) { return false; } }   // 載到且介面合格（同 resolve 的判準）
+  // 載到且可用：介面合格、對目前的本機／雲端紀錄也不回格式不對（W.usable，與 resolve 讀同一批紀錄）
+  function good(x, key){ var subj = null; W.SUBJECTS.forEach(function(s){ if (s.key === key) subj = s; }); return !!subj && W.usable(subj, x, src(key), Date.now()); }
   function loadExport(subj){
     var st = S[subj.key], eg = ++st.eg, el = document.createElement("script");
     st.exp = undefined;
@@ -510,7 +511,7 @@ window.G5WrongApp = {
       var bad = false;
       W.OWN_GLOBALS.forEach(function(g){ if (window[g] !== OWN[g]) { try { window[g] = OWN[g]; } catch (e) {} bad = true; } });
       var reg = null; try { reg = window.G5WeakExport && window.G5WeakExport[subj.key]; } catch (e) { reg = null; }
-      // 規則（Codex 審 d287921）：合格的結果一旦有了，後來任何一次的失敗都不撤掉它；
+      // 規則（Codex 審 d287921、b662aeb）：「合格」＝good()＝W.usable（含題數格式）；合格的結果一旦有了，後來任何一次的失敗都不撤掉它；
       // 合格的結果不論哪一次（含逾時後晚到）載到都採用；不合格（"bad"）只蓋過「最新一次」或「載不到」
       if (bad || !reg) { if (!good(st.exp, subj.key) && (eg === st.eg || st.exp === null)) { st.exp = "bad"; render(); } }
       else if (good(reg, subj.key) || !good(st.exp, subj.key)) { st.exp = reg; render(); }
@@ -548,12 +549,13 @@ window.G5WrongApp = {
     again.forEach(loadExport);
     render();
   }
+  function src(key){
+    var local; try { local = { raw: window.localStorage.getItem(key) }; } catch (e) { local = { err: true }; }
+    return { exp: S[key].exp, local: local, cloud: S[key].cloud, auto: get("g5sync.auto") !== null };
+  }
   function rows(){
-    var now = Date.now(), auto = get("g5sync.auto") !== null;
-    return W.SUBJECTS.map(function(s){
-      var local; try { local = { raw: window.localStorage.getItem(s.key) }; } catch (e) { local = { err: true }; }
-      return W.resolve(s, { exp: S[s.key].exp, local: local, cloud: S[s.key].cloud, auto: auto }, now);
-    });
+    var now = Date.now();
+    return W.SUBJECTS.map(function(s){ return W.resolve(s, src(s.key), now); });
   }
   function rowHtml(r){
     var cls = r.state !== "ok" ? r.state : r.sum.weak ? "ok" : "zero";
