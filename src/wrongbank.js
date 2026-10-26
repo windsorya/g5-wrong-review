@@ -11,6 +11,18 @@
 (function (root) {
   "use strict";
   var ITEMS = [
+    {
+      id: "w-math-1026-01", subject: "數學", source: "數學作業：和 13/39 比大小（填填看）", added: "2026-10-26",
+      type: "choice", q: "下面哪一個分數比 13/39 小？",
+      opts: ["28/78", "14/45", "14/30", "1/2"], a: 1, her: "28/78",
+      why: "13/39 約分後是 1/3，也就是 14/42。14/45 和 14/42 分子一樣，分母比較大，所以比較小。28/78 約分是 14/39，比 13/39 多一點，是比較大。比大小前，先約分再比。"
+    },
+    {
+      id: "w-math-1026-02", subject: "數學", source: "數學作業：和 13/39 比大小（填填看）", added: "2026-10-26",
+      type: "choice", q: "下面哪一個分數比 13/39 大？",
+      opts: ["1/4", "10/36", "14/45", "28/78"], a: 3, her: "14/45",
+      why: "28/78 上下同除以 2，是 14/39。14/39 比 13/39 多 1/39，所以比較大。14/45 看起來數字大，其實比 1/3 小。分子一樣時，分母越大，分數越小。"
+    }
   ];
   var api = { ITEMS: ITEMS };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.G5WrongBank = api;

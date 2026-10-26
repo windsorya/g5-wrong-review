@@ -324,7 +324,8 @@ def hidden_on(d, id_):
 
 # ======================= 原有流程 =======================
 def flow_empty(browser, label, device=None):
-    ctx, pg, errors = open_page(browser, device)
+    # 題庫空的情境用注入的空清單測（2026-10-26 題庫第一次有題，不能再靠正式題庫是空的）
+    ctx, pg, errors = open_page(browser, device, items=[])
     check(f"{label} 標題與倒數", "錯題複習" in pg.title() and pg.locator("#days").inner_text().strip().isdigit())
     got = nav(pg)
     check(f"{label} 切換列六項、順序：各科→錯題複習→難題解說", [g[0] for g in got] == ORDER, got)
