@@ -94,11 +94,14 @@ UNSETTLED = ("正在同步", "失敗", "稍後", "離線", "尚未開啟")
 def judged(pg, label):
     """負向案例的前提：同步真的 GET 過這個 key、雲端那份 ODD 真的被本站讀檔判斷判成 false、狀態已落定（不是進行中／離線／失敗）。
     等到 ODD 判讀出現為止（最多 10 秒），不靠固定等待。"""
+    # 同一個期限內一直等到「ODD 已判讀」且「狀態已落定」兩者同時成立（Codex 審 834ec65：判讀後固定 300ms 會誤判稍晚落定的正常流程）
     try:
-        pg.wait_for_function("(odd) => (window.__readable || []).some(c => c[0] === odd)", arg=ODD, timeout=10000)
+        pg.wait_for_function("""([odd, bad]) => {
+            const st = ((document.querySelector('#g5sync .g5s-status') || {}).textContent || '').trim();
+            return (window.__readable || []).some(c => c[0] === odd) && st !== '' && !bad.some(w => st.includes(w)); }""",
+            arg=[ODD, list(UNSETTLED)], timeout=10000)
     except Exception:
         pass
-    pg.wait_for_timeout(300)
     st = status(pg)
     calls = pg.evaluate("window.__readable || []")
     check(label + " 前提：同步讀過雲端（GET " + KEY + "）", ("get", KEY) in OPS, OPS[-5:])
