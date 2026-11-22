@@ -58,8 +58,8 @@ def backend(route):
 
 # 包住頁面公開的讀檔判斷，數它被叫幾次（sync.js 的 accepts 會叫它）：負向案例「沒換上」必須是判斷過才沒換，不是同步沒跑
 COUNT = r"""
-(() => { let f; window.__readable = 0; Object.defineProperty(window, 'G5SyncReadable', { configurable: true,
-  get() { return f; }, set(v) { f = typeof v === 'function' ? function (r) { window.__readable++; return v(r); } : v; } }); })();
+(() => { let f; window.__readable = []; Object.defineProperty(window, 'G5SyncReadable', { configurable: true,
+  get() { return f; }, set(v) { f = typeof v === 'function' ? function (r) { const out = v(r); window.__readable.push([r, out]); return out; } : v; } }); })();
 """
 
 
@@ -88,12 +88,22 @@ def status(pg):
     return pg.evaluate("(document.querySelector('#g5sync .g5s-status')||{}).textContent||''")
 
 
+UNSETTLED = ("正在同步", "失敗", "稍後", "離線", "尚未開啟")
+
+
 def judged(pg, label):
-    """負向案例的前提：同步真的 GET 過這個 key、讀檔判斷真的被叫過、沒有停在連線失敗。"""
+    """負向案例的前提：同步真的 GET 過這個 key、雲端那份 ODD 真的被本站讀檔判斷判成 false、狀態已落定（不是進行中／離線／失敗）。
+    等到 ODD 判讀出現為止（最多 10 秒），不靠固定等待。"""
+    try:
+        pg.wait_for_function("(odd) => (window.__readable || []).some(c => c[0] === odd)", arg=ODD, timeout=10000)
+    except Exception:
+        pass
+    pg.wait_for_timeout(300)
     st = status(pg)
+    calls = pg.evaluate("window.__readable || []")
     check(label + " 前提：同步讀過雲端（GET " + KEY + "）", ("get", KEY) in OPS, OPS[-5:])
-    check(label + " 前提：讀檔判斷有被叫到", pg.evaluate("window.__readable") > 0, pg.evaluate("window.__readable"))
-    check(label + " 前提：不是連線失敗", "失敗" not in st and "稍後" not in st, st)
+    check(label + " 前提：雲端那份被讀檔判斷判成讀不懂", any(c[0] == ODD and c[1] is False for c in calls), [(c[0][:30], c[1]) for c in calls])
+    check(label + " 前提：狀態已落定（非進行中／離線／失敗）", st.strip() != "" and not any(w in st for w in UNSETTLED), st)
 
 
 def main():
