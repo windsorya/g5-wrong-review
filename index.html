@@ -920,6 +920,7 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center;justify-conten
 (function(){
 "use strict";
 var C = window.G5WrongCore, KEY = C.KEY, EXAM = "2026-11-05";
+window.G5SyncReadable = function (raw) { try { return C.decode(raw).ok === true; } catch (e) { return false; } };   // #5099：給同步比較用的本站嚴格讀檔（讀不懂＝不參加比較、不自動換上）
 // e2e 測試用：測試在頁面載入前放 window.G5WrongTestItems，正式網頁不會有這個變數
 var RAW = Array.isArray(window.G5WrongTestItems) ? window.G5WrongTestItems : window.G5WrongBank.ITEMS;
 var $ = function(s){ return document.querySelector(s); };
@@ -1186,6 +1187,7 @@ window.G5WrongApp = {
       api = window.G5Sync.init({
         endpoint: "https://script.google.com/macros/s/AKfycbxwo08VVT5tSRf-DsQEoo1hMlCm1YytGTzj89BPtJ6YWjPieuKyAPbnWXjUKagBdL6l/exec",
         keys: ["g5wrong.v1"], container: "#g5sync",
+        accepts: {"g5wrong.v1": function(raw){ return typeof window.G5SyncReadable === "function" && window.G5SyncReadable(raw) === true; }},   // #5099：本站讀不懂的那份不參加比較
         summarize: {"g5wrong.v1": function(j){ try { var x = JSON.parse(j), it = x.it || {}, ks = Object.keys(it); return "練過 " + ks.length + " 題、學會 " + ks.filter(function(k){ return it[k] && it[k].m; }).length + " 題"; } catch (e) { return "（讀不懂的紀錄）"; } }},
         canReplace: function(key){ return A.canReplace(key); },
         accept: function(key, data){ return A.accept(key, data); }
