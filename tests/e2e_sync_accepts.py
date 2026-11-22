@@ -25,6 +25,7 @@ QR_JS = SYNC_JS.with_name("qrcode.js")
 EP = "https://script.google.com/macros/s/AKfycbxwo08VVT5tSRf-DsQEoo1hMlCm1YytGTzj89BPtJ6YWjPieuKyAPbnWXjUKagBdL6l/exec"
 CODE = "ABCDEFGHJKMN"
 STORE = {}
+OPS = []          # 假後端收到的每個請求 (op, key)：負向案例要先證明同步真的讀過雲端
 RESULTS = []
 
 
@@ -38,6 +39,7 @@ def backend(route):
     k = (req.get("code"), req.get("key"))
     rev, data, upd = STORE.get(k, (0, None, None))
     op = req.get("op")
+    OPS.append((op, req.get("key")))
     if op == "ping":
         body = {"ok": True}
     elif op == "get":
@@ -54,8 +56,16 @@ def backend(route):
     route.fulfill(status=200, content_type="application/json", headers={"Access-Control-Allow-Origin": "*"}, body=json.dumps(body))
 
 
+# 包住頁面公開的讀檔判斷，數它被叫幾次（sync.js 的 accepts 會叫它）：負向案例「沒換上」必須是判斷過才沒換，不是同步沒跑
+COUNT = r"""
+(() => { let f; window.__readable = 0; Object.defineProperty(window, 'G5SyncReadable', { configurable: true,
+  get() { return f; }, set(v) { f = typeof v === 'function' ? function (r) { window.__readable++; return v(r); } : v; } }); })();
+"""
+
+
 def device(browser):
     ctx = browser.new_context()
+    ctx.add_init_script(COUNT)
     ctx.route(lambda url: url.startswith(EP), backend)
     ctx.route("https://windsorya.github.io/g5-help/sync.js", lambda r: r.fulfill(body=SYNC_JS.read_text(), content_type="application/javascript"))
     ctx.route("https://windsorya.github.io/g5-help/qrcode.js", lambda r: r.fulfill(body=QR_JS.read_text(), content_type="application/javascript"))
@@ -78,6 +88,14 @@ def status(pg):
     return pg.evaluate("(document.querySelector('#g5sync .g5s-status')||{}).textContent||''")
 
 
+def judged(pg, label):
+    """負向案例的前提：同步真的 GET 過這個 key、讀檔判斷真的被叫過、沒有停在連線失敗。"""
+    st = status(pg)
+    check(label + " 前提：同步讀過雲端（GET " + KEY + "）", ("get", KEY) in OPS, OPS[-5:])
+    check(label + " 前提：讀檔判斷有被叫到", pg.evaluate("window.__readable") > 0, pg.evaluate("window.__readable"))
+    check(label + " 前提：不是連線失敗", "失敗" not in st and "稍後" not in st, st)
+
+
 def main():
     if "options.accepts" not in SYNC_JS.read_text():
         print(f"FAIL 前提：{SYNC_JS} 沒有 options.accepts（g5-help #5099 還沒進這份 sync.js）")
@@ -92,14 +110,16 @@ def main():
         probe.close()
 
         STORE.clear(); STORE[(CODE, KEY)] = (1, ODD, int(time.time() * 1000))
-        d = device(br); pg = opened(d, errors, local=blank, hash_="#sync=" + CODE)
+        OPS.clear(); d = device(br); pg = opened(d, errors, local=blank, hash_="#sync=" + CODE)
+        judged(pg, "①")
         check("① 雲端讀不懂（40 筆）沒換上：這台還是自己那份", pg.evaluate("(k) => localStorage.getItem(k)", KEY) == blank)
         check("① 雲端那份不動（rev 1）", STORE[(CODE, KEY)][:2] == (1, ODD), STORE[(CODE, KEY)][0])
         check("① 不顯示已同步", "已同步" not in status(pg), status(pg))
         d.close()
 
         STORE.clear(); STORE[(CODE, KEY)] = (1, ODD, int(time.time() * 1000))
-        d = device(br); pg = opened(d, errors, hash_="#sync=" + CODE)
+        OPS.clear(); d = device(br); pg = opened(d, errors, hash_="#sync=" + CODE)
+        judged(pg, "②")
         check("② 空白裝置：讀不懂的雲端沒寫進這台", pg.evaluate("(k) => localStorage.getItem(k)", KEY) is None,
               (pg.evaluate("(k) => localStorage.getItem(k)", KEY) or "")[:80])
         check("② 雲端那份不動", STORE[(CODE, KEY)][:2] == (1, ODD))
